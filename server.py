@@ -19,6 +19,7 @@ os.environ.setdefault("HF_HOME", str(Path(os.environ.get("STATE_DIR", "/var/lib/
 import auth
 import downloader
 import hfinfo
+import quants
 
 from huggingface_hub import HfApi
 from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
@@ -29,6 +30,7 @@ PORT = int(os.environ.get("PORT", "8080"))
 MIN_FREE = float(os.environ.get("MIN_FREE_GB", "10")) * 1e9
 WEB_DIR = Path(__file__).with_name("web")
 REPO_RE = re.compile(r"^[A-Za-z0-9][\w.-]*/[\w.-]+$")
+VARIANT_RE = re.compile(r"^[A-Za-z0-9][\w.+-]{0,79}$")
 MAC_SMB_URL = os.environ.get("MAC_SMB_URL", "")        # e.g. smb://<smb-host>/files
 MAC_MOUNT = os.environ.get("MAC_MOUNT", "/Volumes/files")
 LLM_SUBDIR = os.environ.get("LLM_SUBDIR", LLM_DIR.name)  # path of LLM_DIR inside the share
@@ -89,18 +91,22 @@ def parse_repo(text):
     return repo, rev
 
 
-def read_marker(d, with_rev=False):
-    """.hf-repo lines: repo, commit sha of the complete download, requested revision (optional)."""
+def read_meta(d):
+    """.hf-repo lines: repo, commit sha of the complete download, requested revision (optional),
+    quant variant (optional; empty = the whole repo)."""
     m = Path(d) / ".hf-repo"
-    lines = m.read_text().split() if m.exists() else []
-    repo = lines[0] if lines else None
-    sha = lines[1] if len(lines) > 1 else None
-    rev = lines[2] if len(lines) > 2 else None
-    return (repo, sha, rev) if with_rev else (repo, sha)
+    lines = [x.strip() for x in m.read_text().splitlines()] if m.exists() else []
+    lines += [""] * (4 - len(lines))
+    return {"repo": lines[0] or None, "sha": lines[1] or None, "rev": lines[2] or None, "variant": lines[3] or None}
 
 
-def write_marker(d, repo, sha, rev=None):
-    (Path(d) / ".hf-repo").write_text(f"{repo}\n{sha}\n{rev or ''}\n")
+def read_marker(d, with_rev=False):
+    m = read_meta(d)
+    return (m["repo"], m["sha"], m["rev"]) if with_rev else (m["repo"], m["sha"])
+
+
+def write_marker(d, repo, sha, rev=None, variant=None):
+    (Path(d) / ".hf-repo").write_text(f"{repo}\n{sha}\n{rev or ''}\n{variant or ''}\n")
 
 
 def tracked_branch(rev):
@@ -108,12 +114,13 @@ def tracked_branch(rev):
     return "main" if not rev or re.fullmatch(r"[0-9a-f]{40}", rev) else rev
 
 
-def dir_for(repo):
-    name = repo.split("/")[1]
-    d = LLM_DIR / name
-    owner, _ = read_marker(d)
-    if d.exists() and owner and owner != repo:
-        d = LLM_DIR / repo.replace("/", "__")
+def dir_for(repo, variant=None):
+    """One folder per repo, or per repo + quant when only one quant of a GGUF repo is downloaded."""
+    suffix = f"-{variant}" if variant else ""
+    d = LLM_DIR / (repo.split("/")[1] + suffix)
+    meta = read_meta(d)
+    if d.exists() and meta["repo"] and (meta["repo"] != repo or meta["variant"] != variant):
+        d = LLM_DIR / (repo.replace("/", "__") + suffix)
     return d
 
 
@@ -196,6 +203,7 @@ def run_job(j):
             save()
         # pin to one commit: resuming after the repo changes upstream must not mix revisions
         sha, files = downloader.fetch_manifest(api, j["repo"], j.get("sha") or j.get("revision"))
+        files = quants.select(files, j.get("variant"))  # one quant of a GGUF repo, not all of them
         total = sum(i["size"] for i in files.values())
         d = Path(j["dir"])
         if d.exists():
@@ -221,14 +229,14 @@ def run_job(j):
             # updating an existing download: keep the old marker until the update completes,
             # so a failed/cancelled update still reports the folder as the old version
             try:
-                prev = (old_sha, manifest_for(j["repo"], old_sha))
+                prev = (old_sha, quants.select(manifest_for(j["repo"], old_sha), j.get("variant"), strict=False))
             except Exception as e:
                 log(f"could not load manifest of previous commit {old_sha[:12]} ({e}); re-verifying all files")
         elif owner != j["repo"]:
-            write_marker(d, j["repo"], sha, j.get("revision"))
+            write_marker(d, j["repo"], sha, j.get("revision"), j.get("variant"))
         log(f"start {j['repo']}@{sha[:12]}: {len(files)} files, {total/1e9:.2f} GB, {already/1e9:.2f} GB already on disk")
         downloader.download_all(j["repo"], sha, d, files, stop, log, workers=4, on_verify=note, prev=prev)
-        write_marker(d, j["repo"], sha, j.get("revision"))
+        write_marker(d, j["repo"], sha, j.get("revision"), j.get("variant"))
         with lock:
             j["status"] = "done"; j["finished"] = time.time(); j["note"] = None
             updates.pop(d.name, None)
@@ -286,9 +294,9 @@ def list_models():
                         size += os.stat(os.path.join(root, f)).st_size; n += 1
                     except FileNotFoundError:
                         pass
-            repo, sha, rev = read_marker(d, with_rev=True)
+            meta = read_meta(d)
             pd = d / downloader.PART_DIR
-            out.append({"name": d.name, "repo": repo, "sha": sha, "rev": rev,
+            out.append({"name": d.name, "repo": meta["repo"], "sha": meta["sha"], "rev": meta["rev"], "variant": meta["variant"],
                         "size": size, "files": n, "mtime": d.stat().st_mtime,
                         "partial": pd.exists() and any(pd.rglob("*.part"))})
     _models_cache.update(t=time.time(), v=out)
@@ -344,7 +352,8 @@ def check_update(m):
            "remote_date": info.last_modified.isoformat() if info.last_modified else None, "checked": time.time()}
     if info.sha == sha:
         return res
-    old, new = manifest_for(repo, sha), manifest_for(repo, info.sha)
+    v = m.get("variant")
+    old, new = quants.select(manifest_for(repo, sha), v, strict=False), quants.select(manifest_for(repo, info.sha), v, strict=False)
     key = downloader._key
     changed = [p for p in new if p in old and key(new[p]) != key(old[p])]
     added = [p for p in new if p not in old]
@@ -582,13 +591,18 @@ def delete_model(name, confirm):
 
 
 def local_status(repo):
-    """Is this repo already in the folder / in the queue?"""
+    """Is this repo (or which of its quants) already in the folder / in the queue?
+    Keys of local/jobs are the quant variant, "" for a whole-repo download."""
     with lock:
-        j = next((j for j in reversed(jobs) if j["repo"] == repo), None)
-    d = dir_for(repo)
-    owner, sha = read_marker(d)
-    return {"job_status": j["status"] if j else None,
-            "local_dir": str(d) if owner == repo else None, "local_sha": sha if owner == repo else None}
+        js = {}
+        for j in jobs:  # later jobs win
+            if j["repo"] == repo:
+                js[j.get("variant") or ""] = j["status"]
+    local = {m.get("variant") or "": m["name"] for m in list_models() if m["repo"] == repo and not m["partial"]}
+    whole = dir_for(repo)
+    owner, sha = read_marker(whole)
+    return {"job_status": js.get(""), "local_dir": str(whole) if owner == repo else None,
+            "local_sha": sha if owner == repo else None, "local_variants": local, "job_variants": js}
 
 
 def preview(q, lib=None):
@@ -612,19 +626,31 @@ def preview(q, lib=None):
     return {"kind": "search", "query": q, "results": hfinfo.search(q, lib=lib or None), **extra}
 
 
-def add_job(repo_text, force=False, update=False):
+def add_job(repo_text, force=False, update=False, variant=None, name=None):
     repo, rev = parse_repo(repo_text)
-    d = dir_for(repo)
+    variant = (variant or "").strip() or None
+    if variant and not VARIANT_RE.match(variant):
+        raise ValueError(f"not a valid quant name: {variant!r}")
     if update:
-        owner, _, old_rev = read_marker(d, with_rev=True)
-        if owner != repo:
+        if name:  # the Library names the folder: a repo can be in several (one per quant)
+            if name.startswith(".") or "/" in name or "\\" in name or not (LLM_DIR / name).is_dir():
+                raise ValueError(f"{name} is not a model folder")
+            d = LLM_DIR / name
+        else:
+            d = dir_for(repo, variant)
+        meta = read_meta(d)
+        if meta["repo"] != repo:
             raise ValueError(f"{repo} is not in the folder yet")
-        rev = None if tracked_branch(old_rev) == "main" else old_rev
+        variant = meta["variant"]
+        rev = None if tracked_branch(meta["rev"]) == "main" else meta["rev"]
+    else:
+        d = dir_for(repo, variant)
+    label = repo + (f" ({variant})" if variant else "")
     with lock:
         for j in jobs:
-            if j["repo"] == repo and j["status"] in ACTIVE:
-                raise ValueError(f"{repo} is already queued")
-        j = {"id": uuid.uuid4().hex[:10], "repo": repo, "revision": rev, "dir": str(d),
+            if j["dir"] == str(d) and j["status"] in ACTIVE:
+                raise ValueError(f"{label} is already queued")
+        j = {"id": uuid.uuid4().hex[:10], "repo": repo, "revision": rev, "variant": variant, "dir": str(d),
              "status": "queued", "created": time.time(), "force": bool(force), "error": None,
              "kind": "update" if update else "download"}
         jobs.append(j); save()
@@ -799,7 +825,8 @@ class H(BaseHTTPRequestHandler):
                 AUTH.logout(self.token)
                 return self.send(200, {"ok": True}, headers={"Set-Cookie": AUTH.cookie("", 0)})
             if parts == ["api", "jobs"]:
-                return self.send(200, add_job(data.get("repo", ""), data.get("force"), data.get("update")))
+                return self.send(200, add_job(data.get("repo", ""), data.get("force"), data.get("update"),
+                                              data.get("variant"), data.get("name")))
             if parts == ["api", "updates", "check"]:
                 start_update_check(); return self.send(200, {"started": True})
             if parts == ["api", "models", "delete"]:

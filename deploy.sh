@@ -14,11 +14,11 @@ BOOTSTRAP=0
 [[ ${1:-} == --bootstrap ]] && BOOTSTRAP=1
 
 cd "$(dirname "$0")"
-APP_FILES=(server.py downloader.py hfinfo.py auth.py web/index.html web/login.html)
+APP_FILES=(server.py downloader.py hfinfo.py quants.py auth.py web/index.html web/login.html)
 for f in "${APP_FILES[@]}" llm-manager llm-manager.service env.example; do
   [[ -f $f ]] || { echo "missing $f" >&2; exit 1; }
 done
-python3 -m py_compile server.py downloader.py hfinfo.py auth.py
+python3 -m py_compile server.py downloader.py hfinfo.py quants.py auth.py
 
 echo "==> deploying to CT $CTID on $PXE_HOST"
 # 1) upload the files to a temp dir on the Proxmox node, 2) run the install script there

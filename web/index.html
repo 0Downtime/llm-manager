@@ -186,6 +186,10 @@ tr.open .caret{transform:rotate(90deg)}
 .res .id{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .res .meta{color:var(--mut);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .pcard{background:var(--well);box-shadow:none}
+.qpick{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:14px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.qpick label{font-size:12.5px;font-weight:600}
+.qpick select{flex:0 1 340px;min-width:0;font-family:var(--mono);font-size:13px}
+.qpick .hint{margin:0;flex:1 1 220px}
 
 /* ---------- model card ---------- */
 .mhead{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
@@ -420,7 +424,7 @@ function tele(k,v){return `<div><dt>${k}</dt><dd>${v}</dd></div>`}
 function jobCard(j){
   const total=j.total||0, bytes=j.status==='done'?total:(j.bytes||0), pct=total?bytes/total*100:0;
   const running=j.status==='running';
-  let h=`<article class="card job st-${esc(j.status)}" data-id="${esc(j.id)}" aria-label="${esc(j.repo)}"><div class="jobhead"><span class="repo">${esc(j.repo)}${j.revision?` <span class="mut">@${esc(j.revision)}</span>`:''}${j.kind==='update'?' <span class="pill info">update</span>':''}</span><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div>`;
+  let h=`<article class="card job st-${esc(j.status)}" data-id="${esc(j.id)}" aria-label="${esc(j.repo)}"><div class="jobhead"><span class="repo">${esc(j.repo)}${j.revision?` <span class="mut">@${esc(j.revision)}</span>`:''}${j.variant?` <span class="pill lc">${esc(j.variant)}</span>`:''}${j.kind==='update'?' <span class="pill info">update</span>':''}</span><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div>`;
   h+=`<div class="mut mono dir">${esc(j.dir)}</div>`;
   if(total){
     h+=`<div class="tele"><div class="pct">${pct.toFixed(1)}<span>%</span></div><dl class="tgrid">`+tele('Downloaded',`${fmt(bytes)} <span class="mut">/ ${fmt(total)}</span>`);
@@ -469,37 +473,70 @@ $('#jobs').addEventListener('click',async e=>{
 });
 
 /* ---------- model card (shared by browser + folder list) ---------- */
-function macFit(size){
-  const ram=parseFloat($('#ram').value);if(!ram||!size)return '';
+function fitLevel(size){
+  const ram=parseFloat($('#ram').value);if(!ram||!size)return null;
   const need=size/1e9*1.05+2, lim=ram*(ram>36?0.75:0.67);
-  if(need<=lim) return `<span class="pill good lc">fits a ${ram} GB Mac (~${need.toFixed(0)} GB)</span>`;
+  return need<=lim?'good':need<=ram*0.9?'warn':'bad';
+}
+/* ---------- quant variants (GGUF repos ship many quants; download one) ---------- */
+const pickedVariant={}; // repo -> quant the user chose in this page session
+function chooseVariant(m){
+  const vs=m.variants; if(!vs||!vs.length)return null;
+  const p=pickedVariant[m.id]; if(p&&vs.some(x=>x.id===p))return p;
+  let d=vs.some(x=>x.id===m.default_variant)?m.default_variant:vs[0].id;
+  // with a Mac memory size set, step down to the largest real quant that fits it
+  const dv=vs.find(x=>x.id===d), lvl=dv&&fitLevel(dv.size);
+  if(lvl&&lvl!=='good'){const ok=vs.filter(x=>x.quant&&fitLevel(x.size)==='good');if(ok.length)d=ok[ok.length-1].id}
+  return d;
+}
+function variantLabel(x,m){
+  if(x.original)return 'Original weights (safetensors)';
+  return x.id+(x.quant?'':' (extra file)')+(x.id===m.default_variant?' ★':'');
+}
+const FITTXT={good:'fits',warn:'tight',bad:'too big'};
+function quantPicker(m,cur){
+  const opts=m.variants.map(x=>{const f=fitLevel(x.size);
+    return `<option value="${esc(x.id)}" ${x.id===cur?'selected':''}>${esc(variantLabel(x,m))} · ${fmt(x.size)}${f?' · '+FITTXT[f]:''}</option>`}).join('');
+  return `<div class="qpick"><label for="qsel">Quant</label><select id="qsel" data-variant>${opts}</select>
+    <div class="hint">${m.variants.length} quants in this repo; only the one you pick is downloaded. ★ ${esc(m.default_variant)} is the usual size/quality balance; bigger = closer to the original.</div></div>`;
+}
+function macFit(size){
+  const ram=parseFloat($('#ram').value), lvl=fitLevel(size);if(!lvl)return '';
+  const need=size/1e9*1.05+2;
+  if(lvl==='good') return `<span class="pill good lc">fits a ${ram} GB Mac (~${need.toFixed(0)} GB)</span>`;
   if(need<=ram*0.9) return `<span class="pill warn lc" title="Above macOS's default GPU memory limit; raise iogpu.wired_limit_mb">tight on ${ram} GB (~${need.toFixed(0)} GB)</span>`;
   return `<span class="pill bad lc">too big for ${ram} GB (~${need.toFixed(0)} GB)</span>`;
 }
 function stat(k,v){return v==null||v===''||v==='–'?'':`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`}
 function benchVal(v){return typeof v==='number'?(Math.round(v*100)/100):esc(v)}
-function modelCard(m,{browse}={}){
+function modelCard(m,{browse,variant}={}){
   const c=m.config||{};
+  const vid=m.variants?(browse?chooseVariant(m):variant):null, v=vid&&m.variants.find(x=>x.id===vid)||null;
+  const size=v?v.size:m.size, key=v?v.id:'';
+  const inFolder=m.local_variants?m.local_variants[key]:m.local_dir, jst=m.job_variants?m.job_variants[key]:m.job_status;
   let h=`<div class="mhead"><a class="repo" href="https://huggingface.co/${esc(m.id)}" target="_blank" rel="noopener">${esc(m.id)}</a>`;
   if(m.library) h+=`<span class="pill lc">${esc(m.library)}</span>`;
   if(m.pipeline) h+=`<span class="pill lc">${esc(m.pipeline)}</span>`;
   if(m.gated) h+=`<span class="pill warn">gated</span>`;
-  if(m.local_dir) h+=`<span class="pill good">in folder</span>`;
-  else if(m.job_status) h+=`<span class="pill ${esc(m.job_status)}">${esc(m.job_status)}</span>`;
+  if(v&&!browse) h+=`<span class="pill lc">${esc(v.id)}</span>`;
+  if(browse&&inFolder) h+=`<span class="pill good">in folder${v?' · '+esc(v.id):''}</span>`;
+  else if(!browse&&m.local_dir) h+=`<span class="pill good">in folder</span>`;
+  else if(jst) h+=`<span class="pill ${esc(jst)}">${esc(jst)}${v?' · '+esc(v.id):''}</span>`;
   h+=`</div>`;
   if(m.description) h+=`<p class="desc">${esc(m.description)}</p>`;
   const params=m.params?num(m.params):m.base_params?num(m.base_params)+' <span class="mut">(base)</span>':null;
   const experts=c.experts?`${esc(c.experts)}${c.experts_active?` / ${esc(c.experts_active)} active`:''}`:null;
-  h+=`<div class="grid">`+stat('Download size',fmt(m.size))+stat('Files',`${esc(m.file_count)} <span class="mut">(${esc(m.weight_files)} weights)</span>`)+stat('Parameters',params)
-    +stat('Context',c.context?num(c.context)+' tokens':null)+stat('Quant',c.quant_bits?esc(c.quant_bits)+'-bit':(m.quantized?'quantized':null))+stat('Experts',experts)
+  h+=`<div class="grid">`+stat('Download size',fmt(size)+(v&&browse?` <span class="mut">of ${fmt(m.size)}</span>`:''))+stat('Files',`${esc(v?v.files:m.file_count)} <span class="mut">(${esc(v?v.weight_files:m.weight_files)} weights)</span>`)+stat('Parameters',params)
+    +stat('Context',c.context?num(c.context)+' tokens':null)+stat('Quant',v?esc(v.original?'original':v.id):c.quant_bits?esc(c.quant_bits)+'-bit':(m.quantized?'quantized':null))+stat('Experts',experts)
     +stat('Layers / hidden',c.layers?`${esc(c.layers)} / ${esc(c.hidden??'–')}`:null)+stat('Architecture',esc(c.architecture||c.model_type))
     +stat('Downloads (30d)',num(m.downloads))+stat('Likes',num(m.likes))+stat('Updated',ago(m.modified))+stat('Created',ago(m.created))
     +stat('License',esc(m.license))+stat('Base model',m.base_chain&&m.base_chain.length?m.base_chain.map(b=>`<a href="https://huggingface.co/${esc(b)}" target="_blank" rel="noopener">${esc(b)}</a>`).join(' → '):null)+`</div>`;
   if(browse){
-    const after=m.disk_free-m.size;
-    h+=`<div class="fit">`+(after>m.min_free?`<span class="pill good lc">fits on share (${fmt(after)} left after)</span>`:`<span class="pill bad lc">needs ${fmt(m.size)}, ${fmt(m.disk_free)} free on share</span>`)
-      +`<span class="pill info lc">~${dur(m.size/(m.speed_hint||30e6))} at ${fmt(m.speed_hint)}/s</span>`+macFit(m.size)+`</div>`;
-  } else h+=`<div class="fit">${macFit(m.size)}</div>`;
+    if(v) h+=quantPicker(m,v.id);
+    const after=m.disk_free-size;
+    h+=`<div class="fit">`+(after>m.min_free?`<span class="pill good lc">fits on share (${fmt(after)} left after)</span>`:`<span class="pill bad lc">needs ${fmt(size)}, ${fmt(m.disk_free)} free on share</span>`)
+      +`<span class="pill info lc">~${dur(size/(m.speed_hint||30e6))} at ${fmt(m.speed_hint)}/s</span>`+macFit(size)+`</div>`;
+  } else h+=`<div class="fit">${macFit(size)}</div>`;
   if(m.benchmarks&&m.benchmarks.length){
     h+=`<h3>Benchmarks ${m.benchmarks_from!==m.id?`<span class="n">· from base model ${esc(m.benchmarks_from)}</span>`:''}</h3><div class="ctable"><table class="bench"><tbody>`;
     h+=m.benchmarks.map(b=>`<tr><td title="${esc(b.notes)}">${esc(b.benchmark)}${b.task?` <span class="mut">${esc(b.task)}</span>`:''}${b.verified?' <span class="pill good">verified</span>':''}${b.subtasks.length?`<div class="sub">${b.subtasks.slice(0,24).map(s=>`<span>${esc(s.task)} <b>${benchVal(s.value)}</b></span>`).join('')}${b.subtasks.length>24?`<span>+${b.subtasks.length-24} more</span>`:''}</div>`:''}</td><td class="r v">${benchVal(b.value)}</td></tr>`).join('');
@@ -509,7 +546,7 @@ function modelCard(m,{browse}={}){
     h+=`<details data-ck="${esc(m.id)}#${i}"><summary>Card table: ${esc(t.title||'untitled')} (${t.rows.length} rows)</summary><div class="ctable"><table><thead><tr>${t.head.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${r.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
   });
   if(m.tags&&m.tags.length) h+=`<div class="tags">${m.tags.map(t=>`<span class="pill lc">${esc(t)}</span>`).join('')}</div>`;
-  if(browse) h+=`<div class="actions"><button class="pri" data-queue="${esc(m.id)}" ${m.job_status&&['queued','preparing','running'].includes(m.job_status)?'disabled':''}>Queue download</button></div>`;
+  if(browse) h+=`<div class="actions"><button class="pri" data-queue="${esc(m.id)}" ${v?`data-qv="${esc(v.id)}"`:''} ${jst&&['queued','preparing','running'].includes(jst)?'disabled':''}>Queue download${v?` · ${esc(v.id)}`:''} · ${fmt(size)}</button></div>`;
   return h;
 }
 
@@ -541,15 +578,23 @@ $('#ram').value=ls.get('macRam')||'';
 $('#ram').addEventListener('input',()=>{ls.set('macRam',$('#ram').value);renderPreview();renderModels()});
 $('#preview').addEventListener('click',async e=>{
   const p=e.target.closest('[data-pick]'); if(p){$('#repo').value=p.dataset.pick;$('#repo').focus();return runPreview()}
-  const q=e.target.closest('[data-queue]'); if(q) queue(q.dataset.queue);
+  const q=e.target.closest('[data-queue]'); if(q) queue(q.dataset.queue,q.dataset.qv);
 });
-async function queue(repo){
-  try{await post('/api/jobs',{repo,force:$('#force').checked});say('Queued '+repo);refresh();if(lastPreview&&lastPreview.id===repo){lastPreview.job_status='queued';renderPreview()}}
+$('#preview').addEventListener('change',e=>{
+  if(!e.target.matches('[data-variant]')||!lastPreview)return;
+  pickedVariant[lastPreview.id]=e.target.value; renderPreview();
+  const sel=$('#preview [data-variant]'); if(sel)sel.focus();
+});
+async function queue(repo,variant){
+  try{await post('/api/jobs',{repo,variant:variant||null,force:$('#force').checked});say('Queued '+repo+(variant?` (${variant})`:''));refresh();
+    if(lastPreview&&lastPreview.id===repo){if(lastPreview.job_variants)lastPreview.job_variants[variant||'']='queued';else lastPreview.job_status='queued';renderPreview()}}
   catch(err){say(err.message)}
 }
 $('#add').addEventListener('submit',e=>{e.preventDefault();const repo=$('#repo').value.trim();if(!repo)return;
   if(lastPreview&&lastPreview.kind==='search'&&!/^[\w.-]+\/[\w.-]+$/.test(repo.replace(/^https?:\/\/(www\.)?huggingface\.co\//,'').split(/[?#]/)[0].split('/').slice(0,2).join('/'))){say('Pick a model from the results first');return}
-  queue(repo)});
+  const pr=lastPreview&&lastPreview.kind==='model'?lastPreview:null;
+  const same=pr&&repo.replace(/^https?:\/\/(www\.)?huggingface\.co\//,'').split(/[?#]/)[0].split('/').slice(0,2).join('/').toLowerCase()===pr.id.toLowerCase();
+  queue(repo,same?chooseVariant(pr):null)});
 
 /* ---------- models in folder, with lazy details ---------- */
 let models=[]; const openModels=new Set(), details={};
@@ -581,7 +626,7 @@ function localPanel(m){
   else if(u.status==='unknown') s+=`<span class="mut">Can't check for updates: ${esc(u.reason)}.</span>`;
   else s+='<span class="mut">Not checked yet.</span>';
   s+=`</div><div class="actions" style="margin:0">`;
-  if(u.status==='update'&&!m.busy) s+=`<button class="pri sm" data-update="${esc(m.repo)}">Update</button>`;
+  if(u.status==='update'&&!m.busy) s+=`<button class="pri sm" data-update="${esc(m.repo)}" data-name="${esc(m.name)}">Update</button>`;
   s+=`<button class="sm danger" data-delete="${esc(m.name)}" ${m.busy?'disabled title="Cancel its download first"':''}>Delete…</button></div></div>`;
   return s;
 }
@@ -593,7 +638,8 @@ function shq(p){ // double-quote for zsh/bash; keep a leading $HOME expandable, 
 }
 function macDest(m){
   const t=ls.get('macTarget')||'omlx', [org,name]=(m.repo||('local/'+m.name)).split('/');
-  if(t!=='custom') return {dest:`${MAC_TARGETS[t].base}/${org}/${name}`,parent:`${MAC_TARGETS[t].base}/${org}`};
+  // one quant of a GGUF repo lives in its own folder (name-QUANT); keep quants apart on the Mac too
+  if(t!=='custom') return {dest:`${MAC_TARGETS[t].base}/${org}/${m.variant?m.name:name}`,parent:`${MAC_TARGETS[t].base}/${org}`};
   let c=(ls.get('macCustom')||'~/models').trim().replace(/\/+$/,'')||'~/models';
   if(c==='~'||c.startsWith('~/')) c='$HOME'+c.slice(1);
   return {dest:`${c}/${m.name}`,parent:c};
@@ -633,8 +679,8 @@ function renderModels(){
   const keep=new Set([...box.querySelectorAll('details[data-ck]')].filter(x=>x.open).map(x=>x.dataset.ck));
   box.innerHTML=models.length?models.map(m=>{
     const open=openModels.has(m.name), d=m.repo&&details[m.repo];
-    let row=`<tr class="m ${open?'open':''}" data-name="${esc(m.name)}"><td><button type="button" class="tog" data-toggle aria-expanded="${open}">${CARET}<span>${esc(m.name)}</span></button>${updBadge(m)}<div class="mrepo mono mut">${m.repo?esc(m.repo):'–'}</div></td><td class="r">${esc(m.files)}</td><td class="r">${fmt(m.size)}</td></tr>`;
-    if(open) row+=`<tr class="detail"><td colspan="3">${localPanel(m)}${macPanel(m,d&&typeof d==='object'&&!d.error?d:null)}${!m.repo?'<span class="mut">Not downloaded by this tool, so the source repo is unknown.</span>':d==='loading'||!d?'<span class="mut" role="status">Loading details…</span>':d.error?`<span class="err">${esc(d.error)}</span>`:modelCard(d)}</td></tr>`;
+    let row=`<tr class="m ${open?'open':''}" data-name="${esc(m.name)}"><td><button type="button" class="tog" data-toggle aria-expanded="${open}">${CARET}<span>${esc(m.name)}</span></button>${updBadge(m)}<div class="mrepo mono mut">${m.repo?esc(m.repo):'–'}${m.variant?' · '+esc(m.variant):''}</div></td><td class="r">${esc(m.files)}</td><td class="r">${fmt(m.size)}</td></tr>`;
+    if(open) row+=`<tr class="detail"><td colspan="3">${localPanel(m)}${macPanel(m,d&&typeof d==='object'&&!d.error?d:null)}${!m.repo?'<span class="mut">Not downloaded by this tool, so the source repo is unknown.</span>':d==='loading'||!d?'<span class="mut" role="status">Loading details…</span>':d.error?`<span class="err">${esc(d.error)}</span>`:modelCard(d,{variant:m.variant})}</td></tr>`;
     return row}).join(''):'<tr><td colspan="3" class="mut" style="padding:28px 8px;text-align:center">Folder is empty.</td></tr>';
   box.querySelectorAll('details[data-ck]').forEach(x=>{if(keep.has(x.dataset.ck))x.open=true});
 }
@@ -673,7 +719,7 @@ $('#models').addEventListener('click',async e=>{
     if(!ok){const r=document.createRange();r.selectNodeContents(cb.previousElementSibling);const s=getSelection();s.removeAllRanges();s.addRange(r)}
     setTimeout(()=>cb.textContent='Copy',1600);return}
   const ub=e.target.closest('[data-update]');
-  if(ub){ub.disabled=true;try{await post('/api/jobs',{repo:ub.dataset.update,update:true,force:$('#force').checked});say('Queued update for '+ub.dataset.update);refresh()}catch(err){say(err.message);ub.disabled=false}return}
+  if(ub){ub.disabled=true;try{await post('/api/jobs',{repo:ub.dataset.update,name:ub.dataset.name,update:true,force:$('#force').checked});say('Queued update for '+ub.dataset.update);refresh()}catch(err){say(err.message);ub.disabled=false}return}
   const db=e.target.closest('[data-delete]');
   if(db){const name=db.dataset.delete,m=models.find(x=>x.name===name);
     const typed=await askDelete(name,m&&m.size);
