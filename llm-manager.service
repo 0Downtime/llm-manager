@@ -1,0 +1,29 @@
+[Unit]
+Description=LLM model manager (Hugging Face downloader + web UI)
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/mnt/files
+
+[Service]
+# The service user must be able to write to LLM_DIR on the share (see README: "Share permissions").
+User=nas
+Group=nas_shares
+UMask=0002
+# All settings live here (see env.example). Root-only directory; no secrets required in it:
+# the HF token and the password hash are stored under STATE_DIR with mode 0600.
+EnvironmentFile=/etc/llm-manager/env
+Environment=PYTHONUNBUFFERED=1
+StateDirectory=llm-manager
+StateDirectoryMode=0750
+ExecStart=/opt/llm-manager/venv/bin/python /opt/llm-manager/server.py serve
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

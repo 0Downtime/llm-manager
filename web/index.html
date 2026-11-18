@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>LLM Models</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c8f031'/%3E%3Cpath d='M16 7v13m0 0l-5.5-5.5M16 20l5.5-5.5M8.5 25h15' fill='none' stroke='%2314170a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --lime:#c8f031;--lime-ink:#14170a;
+  --bg:#f3f2ec;--card:#fffefa;--well:#f6f5ee;--ink:#15171a;--mut:#5a606b;--line:#dcdacf;--hov:#eceadf;
+  --acc:var(--lime);--acc-ink:var(--lime-ink);--acc-text:#456000;--fill:#15171a;--stripe:rgba(255,255,255,.16);
+  --ok:#11794a;--warn:#8f5200;--bad:#c0271b;--bar:#e2e0d5;--focus:#456000;
+  --rail:#111317;--rail-2:#1b1e24;--rail-ink:#eef0f3;--rail-mut:#a3abb8;--rail-line:#2a2e37;
+  --shadow:0 1px 0 rgba(20,23,10,.04),0 8px 24px -16px rgba(20,23,10,.25);
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d0e11;--card:#15171c;--well:#0f1114;--ink:#eceef2;--mut:#9aa3b2;--line:#272b34;--hov:#1c1f26;
+  --acc-text:#c8f031;--fill:#c8f031;--stripe:rgba(0,0,0,.14);
+  --ok:#3fcf8e;--warn:#f2b33d;--bad:#ff7366;--bar:#242831;--focus:#c8f031;
+  --rail:#090a0c;--rail-2:#15171c;--rail-line:#1f232b;
+  --shadow:0 1px 0 rgba(255,255,255,.02),0 12px 30px -18px rgba(0,0,0,.8);
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);overflow-x:hidden}
+a{color:var(--acc-text);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+[hidden]{display:none!important}
+.mut{color:var(--mut)} .mono{font-family:var(--mono);font-size:12.5px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+svg.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100vh}
+.rail{--focus:var(--lime);background:var(--rail);color:var(--rail-ink);border-right:1px solid var(--rail-line);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:22px;padding:20px 14px 16px;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:11px;padding:0 6px}
+.mark{width:36px;height:36px;border-radius:10px;background:var(--lime);color:var(--lime-ink);display:grid;place-items:center;flex:none}
+.mark svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+h1{font-size:16px;line-height:1.15;margin:0;letter-spacing:-.01em;font-weight:700}
+.conn{display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--mono);color:var(--rail-mut);text-transform:uppercase;letter-spacing:.08em;margin-top:5px}
+.conn::before{content:"";width:7px;height:7px;border-radius:50%;background:#6b7280}
+.conn.ok::before{background:var(--lime);box-shadow:0 0 0 3px rgba(200,240,49,.18)}
+.conn.lost{color:#ff8a7f}.conn.lost::before{background:#ff6b5e}
+.tabs{display:grid;gap:4px}
+.tab{position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:var(--rail-mut);font:500 14px/1.2 var(--sans);cursor:pointer;text-align:left}
+.tab:hover{color:var(--rail-ink);background:rgba(255,255,255,.05)}
+.tab[aria-selected=true]{color:#fff;background:var(--rail-2);box-shadow:inset 3px 0 0 var(--lime)}
+.tab[aria-selected=true] svg{color:var(--lime)}
+.count{margin-left:auto;min-width:20px;padding:2px 6px;border-radius:99px;background:var(--lime);color:var(--lime-ink);font:700 11px/1.3 var(--mono);text-align:center}
+.count.amber{background:#f2b33d;color:#1f1400}
+.store{margin-top:auto;padding:12px;border:1px solid var(--rail-line);border-radius:12px;background:var(--rail-2)}
+.store .lab{display:flex;justify-content:space-between;gap:8px;font:500 11px/1.2 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--rail-mut)}
+.store .free{font-size:15px;font-weight:650;margin:6px 0 8px;font-variant-numeric:tabular-nums}
+.store .free.low{color:#ff8a7f}
+.store .bar{background:rgba(255,255,255,.12)} .store .bar>i{background:var(--lime)} .store .bar.full>i{background:#ff6b5e}
+.store .dir{margin-top:9px;color:var(--rail-mut);font-size:11.5px;word-break:break-all}
+.railbtn{display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--rail-line);border-radius:10px;background:transparent;color:var(--rail-mut);font:500 13px/1.2 var(--sans);cursor:pointer}
+.railbtn:hover{color:var(--rail-ink);background:rgba(255,255,255,.05)}
+.railbtn svg{width:16px;height:16px}
+main{min-width:0;padding:28px clamp(16px,3.2vw,40px) 72px;background:var(--bg)}
+main{background:radial-gradient(900px 420px at 100% -80px,color-mix(in srgb,var(--lime) 10%,transparent),transparent 70%),var(--bg);background-repeat:no-repeat}
+.wrap{max-width:1020px;margin:0 auto}
+.phead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+h2{font-size:clamp(24px,4vw,32px);line-height:1.1;letter-spacing:-.03em;margin:0;font-weight:750}
+.phead .sub{color:var(--mut);font-size:13px;margin-top:5px;font-variant-numeric:tabular-nums}
+h3{font-size:12px;margin:18px 0 8px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--mut)}
+h3 .n{text-transform:none;letter-spacing:0;font-weight:400}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+.empty{text-align:center;padding:38px 18px;color:var(--mut)}
+.empty svg{width:34px;height:34px;opacity:.6;margin-bottom:6px}
+.empty .btn{margin-top:12px}
+
+/* ---------- status line ---------- */
+.msgbar{position:sticky;top:10px;z-index:5;max-height:0;overflow:hidden;opacity:0;transition:opacity .15s}
+.msgbar.on{max-height:none;opacity:1;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;padding:10px 12px 10px 14px;border-radius:12px;background:var(--ink);color:var(--bg);box-shadow:0 10px 30px -12px rgba(0,0,0,.5)}
+.msgbar::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--lime);margin-top:6px}
+.msgbar:not(.on)::before{display:none}
+.msg{flex:1;min-width:0;font-size:13.5px;word-break:break-word}
+.msgbar button{flex:none;border:0;background:transparent;color:inherit;opacity:.7;cursor:pointer;padding:2px 6px;font:inherit;border-radius:6px}
+.msgbar button:hover{opacity:1}
+.msgbar :focus-visible{outline-color:var(--lime)}
+.setmsg{min-height:20px;font-size:13px;margin-top:12px}
+
+/* ---------- controls ---------- */
+button{font:inherit}
+.btn,button.sm,button.pri{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 15px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:550 14px/1.2 var(--sans);cursor:pointer;white-space:nowrap}
+.btn:hover,button.sm:hover{background:var(--hov)}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:650}
+button.pri:hover{filter:brightness(.95);background:var(--acc)}
+button.sm{padding:6px 11px;font-size:12.5px;border-radius:8px}
+button.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 55%,var(--line));background:transparent}
+button.danger:hover{background:color-mix(in srgb,var(--bad) 10%,transparent)}
+button.danger.solid{background:var(--bad);border-color:var(--bad);color:#fff}
+@media (prefers-color-scheme:dark){button.danger.solid{color:#1b0300}}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=text],input[type=password],input[type=number],input[type=time],input[type=search],select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--well);color:var(--ink);font:inherit;min-width:0}
+input:focus-visible,select:focus-visible{outline-offset:0;border-color:var(--focus)}
+input[type=number]{width:84px}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--fill);margin:0}
+label.chk{display:inline-flex;flex-wrap:wrap;gap:7px;align-items:center;color:var(--mut);font-size:13px}
+.opts{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;margin-top:12px}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.err{color:var(--bad);font-size:13px;margin-top:6px;word-break:break-word}
+.warnline{color:var(--warn);font-size:13px;margin-top:6px}
+.hint{color:var(--mut);font-size:12px;margin-top:6px}
+
+/* ---------- pills + bars ---------- */
+.pill{--c:var(--mut);display:inline-flex;align-items:center;gap:5px;font:600 10.5px/1.5 var(--mono);padding:2px 8px;border-radius:99px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-color:var(--c);border-color:color-mix(in srgb,var(--c) 45%,transparent);background:color-mix(in srgb,var(--c) 11%,transparent);color:var(--c);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;vertical-align:middle}
+.pill.running,.pill.preparing,.pill.info{--c:var(--acc-text)}
+.pill.done,.pill.good{--c:var(--ok)}
+.pill.warn{--c:var(--warn)}
+.pill.failed,.pill.blocked,.pill.bad{--c:var(--bad)}
+.pill.lc{text-transform:none;letter-spacing:0;font:500 12px/1.5 var(--sans);white-space:normal}
+.pill.running::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s ease-in-out infinite}
+.bar{height:8px;background:var(--bar);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--fill);border-radius:99px;transition:width .6s}
+.bar.big{height:18px;border-radius:7px} .bar.big>i{border-radius:7px;min-width:4px}
+.bar.full>i{background:var(--bad)} .bar.ok>i{background:var(--ok)}
+.st-running .bar.big>i{background-image:linear-gradient(45deg,var(--stripe) 25%,transparent 25%,transparent 50%,var(--stripe) 50%,var(--stripe) 75%,transparent 75%);background-size:28px 28px;animation:stripes 1s linear infinite}
+@keyframes stripes{to{background-position:28px 0}}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- downloads ---------- */
+.job{margin-bottom:14px;position:relative;overflow:hidden}
+.job::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--line)}
+.job.st-running::before,.job.st-preparing::before{background:var(--fill)}
+.job.st-done::before{background:var(--ok)} .job.st-failed::before,.job.st-blocked::before{background:var(--bad)}
+.jobhead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:space-between}
+.repo{font-weight:650;word-break:break-all}
+.jobhead .repo{font-size:16px;letter-spacing:-.01em}
+.job .dir{margin-top:2px;word-break:break-all;font-size:12px}
+.tele{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 28px;margin:14px 0 10px}
+.pct{font-size:clamp(40px,9vw,60px);line-height:.9;font-weight:750;letter-spacing:-.045em;font-variant-numeric:tabular-nums}
+.pct span{font-size:.42em;letter-spacing:0;color:var(--mut);margin-left:2px;font-weight:600}
+.tgrid{display:flex;flex-wrap:wrap;gap:8px 26px;margin:0}
+.tgrid dt{font:500 10.5px/1.3 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.tgrid dd{margin:2px 0 0;font-size:16px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tgrid dd .mut{font-weight:450;font-size:13px}
+.job .note{font-size:13px;margin-top:8px;color:var(--mut)}
+.job .sha{font-size:11.5px;margin-top:4px}
+details summary{cursor:pointer;color:var(--mut);margin-top:10px;font-size:13px;width:fit-content;max-width:100%}
+details summary:hover{color:var(--ink)}
+.files{margin-top:10px;display:grid;gap:6px}
+.f{display:grid;grid-template-columns:minmax(0,1fr) 140px 64px;gap:10px;align-items:center;font-size:12.5px}
+.f .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.f .s{text-align:right;color:var(--mut);font-variant-numeric:tabular-nums;white-space:nowrap}
+.f .bar{height:6px}
+.loglink{font-size:12.5px;color:var(--mut);margin-left:auto}
+
+/* ---------- tables ---------- */
+table{width:100%;border-collapse:collapse}
+td,th{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 10.5px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.tcard{padding:4px 10px}
+.mtable{table-layout:fixed}
+.mtable th.c-files{width:70px} .mtable th.c-size{width:96px}
+.mtable td{overflow-wrap:anywhere}
+#models tr.m{cursor:pointer} #models tr.m:hover td{background:var(--hov)}
+#models tr.m.open td{background:var(--hov);border-bottom-color:transparent}
+#models tr.detail>td{background:var(--well);padding:14px 12px;border-radius:0 0 10px 10px}
+.tog{display:inline-flex;align-items:flex-start;gap:6px;border:0;background:transparent;color:inherit;padding:0;margin:0 6px 0 0;font:650 14px/1.45 var(--sans);cursor:pointer;text-align:left;overflow-wrap:anywhere;vertical-align:top}
+.mrepo{margin:1px 0 0 20px;font-size:12px}
+.caret{width:14px;height:14px;flex:none;margin-top:3px;fill:none;stroke:var(--mut);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+tr.open .caret{transform:rotate(90deg)}
+.libtools{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+
+/* ---------- browse ---------- */
+.search{display:flex;gap:10px;flex-wrap:wrap}
+.sbox{position:relative;flex:1 1 260px;min-width:0}
+.sbox svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--mut);pointer-events:none}
+.sbox input{width:100%;padding:13px 14px 13px 44px;font-size:15px;border-radius:12px}
+.search button{padding:12px 18px;border-radius:12px}
+#preview:empty{display:none}
+#preview{margin-top:16px}
+.results{display:grid;gap:2px}
+.res{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 14px;align-items:center;width:100%;padding:10px 12px;border:0;border-radius:10px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.res:hover{background:var(--hov)}
+.res .id{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res .meta{color:var(--mut);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pcard{background:var(--well);box-shadow:none}
+
+/* ---------- model card ---------- */
+.mhead{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.mhead .repo{font-size:18px;letter-spacing:-.015em;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:8px;margin-top:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 11px;min-width:0}
+.stat .k{font:500 10.5px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.stat .v{font-weight:650;font-size:15px;font-variant-numeric:tabular-nums;word-break:break-word}
+.stat .v .mut{font-weight:450;font-size:12.5px}
+.fit{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.fit:empty{display:none}
+.desc{margin:10px 0 0;opacity:.88;max-width:75ch}
+.bench td.v{font-weight:650;font-size:15px}
+.bench .sub{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--mut);margin-top:3px}
+.ctable{overflow-x:auto;max-width:100%} .ctable table{font-size:12.5px} .ctable th,.ctable td{white-space:nowrap}
+.ctable .bench td:first-child{white-space:normal;min-width:160px}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:12px}
+.local,.mac{padding:12px 14px;margin-bottom:12px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.local{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.local .upd{font-size:13px;min-width:0;flex:1 1 240px}
+.local .upd.has{color:var(--warn)}
+.mac h3{margin-top:0}
+.steps{margin:10px 0;padding-left:20px;display:grid;gap:10px}
+.steps li{min-width:0}
+.cmd{display:flex;gap:6px;align-items:flex-start;margin-top:4px}
+.cmd pre{flex:1;min-width:0;margin:0;padding:8px 10px;border-radius:8px;background:var(--well);border:1px solid var(--line);white-space:pre-wrap;word-break:break-all;font-size:12px}
+
+/* ---------- settings ---------- */
+.sgrid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));align-items:start}
+.card>h3:first-child{margin-top:0}
+.fld{display:grid;gap:5px;margin-top:12px}
+.fld>label,.fld>.l{font-size:12.5px;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row input[type=password]{flex:1 1 180px}
+.unit{color:var(--mut);font-size:13px}
+.now{display:flex;gap:8px;align-items:center;padding:9px 12px;border-radius:10px;background:var(--well);border:1px solid var(--line);font-size:13px}
+
+/* ---------- dialog ---------- */
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--ink);padding:22px;width:min(440px,calc(100vw - 32px));box-shadow:0 30px 80px -20px rgba(0,0,0,.6)}
+dialog::backdrop{background:rgba(8,9,11,.6)}
+dialog h2{font-size:20px;letter-spacing:-.02em}
+dialog p{margin:10px 0 0;font-size:13.5px}
+dialog .nm{font-family:var(--mono);font-size:13px;word-break:break-all;background:var(--well);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+dialog input{width:100%}
+dialog .actions{justify-content:flex-end;margin-top:18px}
+
+/* ---------- small screens ---------- */
+@media (max-width:860px){
+  .app{display:block}
+  .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--rail-line);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 12px;padding:12px 16px;overflow:visible;align-items:center}
+  .brand{padding:0}
+  .railbtn{grid-column:2;grid-row:1;padding:7px 10px}
+  .store{grid-column:1/-1;margin:0;padding:9px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+  .store .lab{grid-column:1} .store .free{grid-column:2;grid-row:1;margin:0;font-size:13px}
+  .store .bar{grid-column:1/-1} .store .dir{grid-column:1/-1;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rail nav{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--rail);border-top:1px solid var(--rail-line);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  .tabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:2px}
+  .tab{flex-direction:column;gap:4px;padding:7px 2px;font-size:11px;text-align:center}
+  .tab[aria-selected=true]{box-shadow:inset 0 3px 0 var(--lime)}
+  .count{position:absolute;top:3px;left:calc(50% + 6px);margin:0;min-width:17px;padding:1px 4px;font-size:10px}
+  main{padding:18px 16px 96px}
+  .msgbar{top:8px}
+}
+@media (max-width:600px){
+  .f{grid-template-columns:minmax(0,1fr) 72px}.f .s{display:none}
+  .hide-sm{display:none}
+  .res{grid-template-columns:minmax(0,1fr);gap:1px}.res .lib{display:none}
+  .card{padding:14px}
+  .tcard{padding:2px 6px}
+  .mtable th.c-files{width:52px} .mtable th.c-size{width:82px}
+  td,th{padding:9px 6px}
+  #models tr.detail>td{padding:10px 6px}
+  .search button{flex:1 1 100%}
+  .loglink{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="rail">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5.5 20h13"/></svg></span>
+    <div><h1>LLM Models</h1><div class="conn" id="conn">Connecting</div></div>
+  </div>
+  <nav aria-label="Sections">
+    <div class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" id="tab-downloads" data-tab="downloads" aria-controls="p-downloads" aria-selected="true">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16"/></svg><span>Downloads</span><span class="count" id="n-downloads" hidden></span></button>
+      <button class="tab" role="tab" id="tab-library" data-tab="library" aria-controls="p-library" aria-selected="false" tabindex="-1">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg><span>Library</span><span class="count amber" id="n-library" hidden></span></button>
+      <button class="tab" role="tab" id="tab-browse" data-tab="browse" aria-controls="p-browse" aria-selected="false" tabindex="-1">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg><span>Browse</span></button>
+      <button class="tab" role="tab" id="tab-settings" data-tab="settings" aria-controls="p-settings" aria-selected="false" tabindex="-1">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9m5 0h2M4 17h2m5 0h9"/><circle cx="15.5" cy="7" r="2.5"/><circle cx="8.5" cy="17" r="2.5"/></svg><span>Settings</span></button>
+    </div>
+  </nav>
+  <div class="store" aria-label="Share space">
+    <div class="lab"><span>Share space</span></div>
+    <div class="free" id="disktxt">…</div>
+    <div class="bar" id="diskbar" aria-hidden="true"><i style="width:0"></i></div>
+    <div class="dir mono" id="dir" title="Models folder"></div>
+  </div>
+  <button class="railbtn" id="logout" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H6a2 2 0 00-2 2v12a2 2 0 002 2h4m5-4l4-4m0 0l-4-4m4 4H9"/></svg>Log out</button>
+</aside>
+
+<main>
+<div class="wrap">
+  <div class="msgbar" id="msgbar"><div class="msg" id="msg" role="status" aria-live="polite"></div><button type="button" id="msgx" aria-label="Dismiss message" hidden>✕</button></div>
+
+  <!-- Downloads -->
+  <section id="p-downloads" role="tabpanel" aria-labelledby="tab-downloads">
+    <div class="phead"><div><h2>Downloads</h2><div class="sub" id="dlsum">&nbsp;</div></div>
+      <button class="btn" type="button" data-goto="browse"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a model</button></div>
+    <div id="jobs"><div class="card empty">No downloads yet.</div></div>
+  </section>
+
+  <!-- Library -->
+  <section id="p-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+    <div class="phead"><div><h2>Library</h2><div class="sub">Models in the folder. Select one for stats, benchmarks and copy-to-Mac commands.</div></div>
+      <div class="libtools"><span class="mut" style="font-size:12.5px" id="updinfo" role="status"></span><button class="btn" id="checkupd" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-2.6-5.9M20 4v5h-5"/></svg>Check for updates</button></div></div>
+    <div class="card tcard"><table class="mtable">
+      <thead><tr><th>Folder / repo</th><th class="r c-files">Files</th><th class="r c-size">Size</th></tr></thead>
+      <tbody id="models"></tbody>
+    </table></div>
+  </section>
+
+  <!-- Browse -->
+  <section id="p-browse" role="tabpanel" aria-labelledby="tab-browse" hidden>
+    <div class="phead"><div><h2>Browse</h2><div class="sub">Search Hugging Face, or paste a repo id or huggingface.co link.</div></div></div>
+    <div class="card">
+      <form id="add" class="search" role="search">
+        <div class="sbox"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+          <label class="sr" for="repo">Search Hugging Face, or paste a repo id or link</label>
+          <input type="text" id="repo" placeholder="Search, or paste org/model or a link" autocomplete="off" spellcheck="false" autocapitalize="off"></div>
+        <button class="pri" type="submit">Queue download</button>
+      </form>
+      <div class="opts">
+        <label class="chk">Library <select id="lib"><option value="">any</option><option value="mlx">MLX</option><option value="gguf">GGUF</option><option value="transformers">Transformers</option></select></label>
+        <label class="chk">Mac memory <input type="number" id="ram" min="8" max="1024" step="8" placeholder="GB"> GB</label>
+        <label class="chk"><input type="checkbox" id="force"> ignore free-space check</label>
+      </div>
+      <div id="preview"></div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="p-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+    <div class="phead"><div><h2>Settings</h2><div class="sub">Hugging Face access and download speed.</div></div></div>
+    <div class="sgrid">
+      <div class="card">
+        <h3>Hugging Face token</h3>
+        <div style="font-size:13.5px" id="tokstatus">…</div>
+        <form id="tokform" autocomplete="off">
+          <div class="fld"><label for="tok">Access token</label>
+            <div class="row"><input type="password" id="tok" placeholder="hf_… (read access is enough)" autocomplete="off" spellcheck="false">
+              <button class="pri" type="submit">Save token</button><button class="btn" type="button" id="tokclear">Remove</button></div></div>
+        </form>
+        <div class="hint">Needed for gated or private repos; also gives higher Hub rate limits. Checked against Hugging Face before saving and never shown again.</div>
+      </div>
+      <div class="card">
+        <h3>Download speed</h3>
+        <div class="now"><span class="mut">Right now</span><b id="throttlenow">…</b></div>
+        <form id="speedform">
+          <div class="fld"><label for="cap">Speed cap</label>
+            <div class="row"><input type="number" id="cap" min="0" step="1"><span class="unit">MB/s (0 = unlimited)</span></div></div>
+          <div class="fld"><span class="l">Quiet hours</span>
+            <div class="row"><label class="chk"><input type="checkbox" id="qon"> Enabled</label>
+              <label class="chk">from <input type="time" id="qstart"></label><label class="chk">to <input type="time" id="qend"></label></div></div>
+          <div class="fld"><label for="qmode">During quiet hours</label>
+            <div class="row"><select id="qmode"><option value="limit">cap at</option><option value="pause">pause downloads</option></select>
+              <span id="qcapwrap" class="row"><label class="sr" for="qcap">Quiet-hours cap in MB/s</label><input type="number" id="qcap" min="0" step="1"><span class="unit">MB/s</span></span></div></div>
+          <div class="actions"><button class="pri" type="submit">Save speed settings</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="setmsg" id="setmsg" role="status" aria-live="polite"></div>
+  </section>
+</div>
+</main>
+</div>
+
+<dialog id="deldlg" aria-labelledby="deltitle">
+  <form id="delform">
+    <h2 id="deltitle">Delete this model?</h2>
+    <p>This permanently deletes <span class="nm" id="delname"></span> (<b id="delsize"></b>) from the share. It cannot be undone.</p>
+    <div class="fld"><label for="delinput">Type the folder name to confirm</label>
+      <input type="text" id="delinput" autocomplete="off" spellcheck="false" autocapitalize="off"></div>
+    <div class="actions"><button class="btn" type="button" id="delcancel">Cancel</button><button class="btn danger solid" type="submit" id="delgo" disabled>Delete permanently</button></div>
+  </form>
+</dialog>
+
+<script>
+const $=s=>document.querySelector(s);
+const fmt=b=>{if(b==null)return'–';const u=['B','KB','MB','GB','TB'];let i=0;while(b>=1000&&i<4){b/=1000;i++}return b.toFixed(i>=3?2:(i?1:0))+' '+u[i]};
+const num=n=>{if(n==null)return'–';const a=Math.abs(n);return a>=1e12?(n/1e12).toFixed(2)+'T':a>=1e9?(n/1e9).toFixed(a>=1e11?0:1)+'B':a>=1e6?(n/1e6).toFixed(1)+'M':a>=1e3?(n/1e3).toFixed(1)+'K':String(n)};
+const dur=s=>{if(!isFinite(s)||s<0)return'–';s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h?`${h}h ${m}m`:m?`${m}m ${x}s`:`${x}s`};
+const ago=t=>{if(!t)return'–';const s=(Date.now()-new Date(t))/1000;return s<3600?Math.max(1,Math.round(s/60))+'m ago':s<86400?Math.round(s/3600)+'h ago':s<86400*60?Math.round(s/86400)+'d ago':new Date(t).toISOString().slice(0,10)};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+const cssq=s=>String(s).replace(/["\\]/g,'\\$&'); // for use inside [attr="…"] selectors
+const openDetails=new Set();
+let state=null;
+async function api(url,opts){const r=await fetch(url,opts);if(r.status===401){location.href='/login';throw new Error('login required')}return r}
+async function post(url,body){const r=await api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});const j=await r.json();if(!r.ok)throw new Error(j.error||r.statusText);return j}
+
+/* ---------- global status line ---------- */
+function say(t){$('#msg').textContent=t||'';$('#msgbar').classList.toggle('on',!!t);$('#msgx').hidden=!t}
+$('#msgx').addEventListener('click',()=>say(''));
+
+/* ---------- tabs ---------- */
+const TABS=['downloads','library','browse','settings'];
+function showTab(t,focus){
+  if(!TABS.includes(t))t='downloads';
+  for(const k of TABS){const b=$('#tab-'+k),on=k===t;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;$('#p-'+k).hidden=!on}
+  ls.set('uiTab',t);
+  if(focus)$('#tab-'+t).focus();
+  if(t==='settings')loadSettings();
+}
+$('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)showTab(b.dataset.tab)});
+$('.tabs').addEventListener('keydown',e=>{
+  const cur=TABS.indexOf((e.target.closest('[data-tab]')||{dataset:{}}).dataset.tab); if(cur<0)return;
+  let n=null;
+  if(e.key==='ArrowDown'||e.key==='ArrowRight')n=(cur+1)%TABS.length;
+  else if(e.key==='ArrowUp'||e.key==='ArrowLeft')n=(cur+TABS.length-1)%TABS.length;
+  else if(e.key==='Home')n=0; else if(e.key==='End')n=TABS.length-1;
+  if(n!=null){e.preventDefault();showTab(TABS[n],true)}
+});
+document.addEventListener('click',e=>{const g=e.target.closest('[data-goto]');if(g){showTab(g.dataset.goto);if(g.dataset.goto==='browse')$('#repo').focus()}});
+
+/* ---------- downloads ---------- */
+function tele(k,v){return `<div><dt>${k}</dt><dd>${v}</dd></div>`}
+function jobCard(j){
+  const total=j.total||0, bytes=j.status==='done'?total:(j.bytes||0), pct=total?bytes/total*100:0;
+  const running=j.status==='running';
+  let h=`<article class="card job st-${esc(j.status)}" data-id="${esc(j.id)}" aria-label="${esc(j.repo)}"><div class="jobhead"><span class="repo">${esc(j.repo)}${j.revision?` <span class="mut">@${esc(j.revision)}</span>`:''}${j.kind==='update'?' <span class="pill info">update</span>':''}</span><span class="pill ${esc(j.status)}">${esc(j.status)}</span></div>`;
+  h+=`<div class="mut mono dir">${esc(j.dir)}</div>`;
+  if(total){
+    h+=`<div class="tele"><div class="pct">${pct.toFixed(1)}<span>%</span></div><dl class="tgrid">`+tele('Downloaded',`${fmt(bytes)} <span class="mut">/ ${fmt(total)}</span>`);
+    if(running) h+=tele('Speed',`${fmt(j.speed)}/s`)+tele('ETA',j.speed>0?dur((total-bytes)/j.speed):'–')+tele('Files',`${j.files_done||0} <span class="mut">/ ${j.file_count}</span>`);
+    else h+=tele('Files',`${j.file_count}`);
+    h+=`</dl></div><div class="bar big ${j.status==='done'?'ok':''}" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct.toFixed(1)}"><i style="width:${pct}%"></i></div>`;
+  }
+  if(j.note) h+=`<div class="note">${esc(j.note)}</div>`;
+  if(running&&state&&state.throttle&&state.throttle.reason) h+=`<div style="margin-top:8px"><span class="pill ${state.throttle.paused?'warn':'info'} lc">${esc(state.throttle.reason)}</span></div>`;
+  if(j.sha) h+=`<div class="mut mono sha">commit ${esc(j.sha.slice(0,12))}</div>`;
+  if(j.error) h+=`<div class="err" role="alert">${esc(j.error)}</div>`;
+  if(running&&j.file_list){
+    const active=j.file_list.filter(f=>!f.done&&f.bytes>0);
+    if(active.length){h+=`<div class="files">`+active.map(fileRow).join('')+`</div>`}
+    h+=`<details data-k="${esc(j.id)}" ${openDetails.has(j.id)?'open':''}><summary>All files (${j.files_done}/${j.file_count} complete)</summary><div class="files">`+j.file_list.map(fileRow).join('')+`</div></details>`;
+  }
+  h+=`<div class="actions">`;
+  if(['queued','preparing','running','blocked'].includes(j.status)) h+=`<button class="sm" data-act="cancel">Cancel</button>`;
+  if(['failed','cancelled','blocked'].includes(j.status)) h+=`<button class="sm pri" data-act="retry">Resume</button>`;
+  if(j.status==='blocked') h+=`<button class="sm" data-act="force">Resume, ignore space check</button>`;
+  if(!['queued','preparing','running'].includes(j.status)) h+=`<button class="sm" data-act="remove">Clear</button>`;
+  h+=`<a class="loglink" href="/api/jobs/${esc(j.id)}/log" target="_blank" rel="noopener">View log</a></div></article>`;
+  return h;
+}
+function fileRow(f){const p=f.size?f.bytes/f.size*100:100;return `<div class="f"><span class="n mono" title="${esc(f.path)}">${esc(f.path)}</span><span class="s">${fmt(f.bytes)} / ${fmt(f.size)}</span><div class="bar ${f.done?'ok':''}"><i style="width:${p}%"></i></div></div>`}
+function renderJobs(s){
+  const box=$('#jobs'), a=document.activeElement;
+  // the list is rebuilt on every poll: remember which control had keyboard focus and put it back
+  let fk=null;
+  if(a&&box.contains(a)){const job=a.closest('.job');
+    if(job) fk=[job.dataset.id,a.dataset.act?`[data-act="${cssq(a.dataset.act)}"]`:a.tagName==='SUMMARY'?'summary':a.tagName==='A'?'a.loglink':null]}
+  box.querySelectorAll('details[data-k]').forEach(x=>x.open?openDetails.add(x.dataset.k):openDetails.delete(x.dataset.k));
+  box.innerHTML=s.jobs.length?s.jobs.map(jobCard).join(''):'<div class="card empty"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16"/></svg><div>No downloads yet.</div><button class="btn" type="button" data-goto="browse">Browse models</button></div>';
+  if(fk&&fk[1]){const el=box.querySelector(`.job[data-id="${cssq(fk[0])}"] ${fk[1]}`);if(el)el.focus({preventScroll:true})}
+  const act=s.jobs.filter(j=>['queued','preparing','running'].includes(j.status)), run=s.jobs.filter(j=>j.status==='running');
+  const speed=run.reduce((t,j)=>t+(j.speed||0),0), tot=run.reduce((t,j)=>t+(j.total||0),0), got=run.reduce((t,j)=>t+(j.bytes||0),0);
+  $('#dlsum').textContent=act.length?`${act.length} active`+(run.length?` · ${fmt(speed)}/s`:'')+(run.length&&s.throttle&&s.throttle.reason?` · ${s.throttle.reason}`:''):s.jobs.length?'Nothing running.':'Queue is empty.';
+  const n=$('#n-downloads'); n.hidden=!act.length; n.textContent=act.length; n.setAttribute('aria-label',act.length+' active');
+  document.title=(run.length&&tot?Math.floor(got/tot*100)+'% · ':'')+'LLM Models';
+}
+$('#jobs').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-act]'); if(!b)return;
+  const id=b.closest('.job').dataset.id, act=b.dataset.act; b.disabled=true;
+  try{await post(`/api/jobs/${encodeURIComponent(id)}/${act==='force'?'retry':act}`,act==='force'?{force:true}:{});refresh()}
+  catch(err){say(err.message);b.disabled=false}
+});
+
+/* ---------- model card (shared by browser + folder list) ---------- */
+function macFit(size){
+  const ram=parseFloat($('#ram').value);if(!ram||!size)return '';
+  const need=size/1e9*1.05+2, lim=ram*(ram>36?0.75:0.67);
+  if(need<=lim) return `<span class="pill good lc">fits a ${ram} GB Mac (~${need.toFixed(0)} GB)</span>`;
+  if(need<=ram*0.9) return `<span class="pill warn lc" title="Above macOS's default GPU memory limit; raise iogpu.wired_limit_mb">tight on ${ram} GB (~${need.toFixed(0)} GB)</span>`;
+  return `<span class="pill bad lc">too big for ${ram} GB (~${need.toFixed(0)} GB)</span>`;
+}
+function stat(k,v){return v==null||v===''||v==='–'?'':`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`}
+function benchVal(v){return typeof v==='number'?(Math.round(v*100)/100):esc(v)}
+function modelCard(m,{browse}={}){
+  const c=m.config||{};
+  let h=`<div class="mhead"><a class="repo" href="https://huggingface.co/${esc(m.id)}" target="_blank" rel="noopener">${esc(m.id)}</a>`;
+  if(m.library) h+=`<span class="pill lc">${esc(m.library)}</span>`;
+  if(m.pipeline) h+=`<span class="pill lc">${esc(m.pipeline)}</span>`;
+  if(m.gated) h+=`<span class="pill warn">gated</span>`;
+  if(m.local_dir) h+=`<span class="pill good">in folder</span>`;
+  else if(m.job_status) h+=`<span class="pill ${esc(m.job_status)}">${esc(m.job_status)}</span>`;
+  h+=`</div>`;
+  if(m.description) h+=`<p class="desc">${esc(m.description)}</p>`;
+  const params=m.params?num(m.params):m.base_params?num(m.base_params)+' <span class="mut">(base)</span>':null;
+  const experts=c.experts?`${esc(c.experts)}${c.experts_active?` / ${esc(c.experts_active)} active`:''}`:null;
+  h+=`<div class="grid">`+stat('Download size',fmt(m.size))+stat('Files',`${esc(m.file_count)} <span class="mut">(${esc(m.weight_files)} weights)</span>`)+stat('Parameters',params)
+    +stat('Context',c.context?num(c.context)+' tokens':null)+stat('Quant',c.quant_bits?esc(c.quant_bits)+'-bit':(m.quantized?'quantized':null))+stat('Experts',experts)
+    +stat('Layers / hidden',c.layers?`${esc(c.layers)} / ${esc(c.hidden??'–')}`:null)+stat('Architecture',esc(c.architecture||c.model_type))
+    +stat('Downloads (30d)',num(m.downloads))+stat('Likes',num(m.likes))+stat('Updated',ago(m.modified))+stat('Created',ago(m.created))
+    +stat('License',esc(m.license))+stat('Base model',m.base_chain&&m.base_chain.length?m.base_chain.map(b=>`<a href="https://huggingface.co/${esc(b)}" target="_blank" rel="noopener">${esc(b)}</a>`).join(' → '):null)+`</div>`;
+  if(browse){
+    const after=m.disk_free-m.size;
+    h+=`<div class="fit">`+(after>m.min_free?`<span class="pill good lc">fits on share (${fmt(after)} left after)</span>`:`<span class="pill bad lc">needs ${fmt(m.size)}, ${fmt(m.disk_free)} free on share</span>`)
+      +`<span class="pill info lc">~${dur(m.size/(m.speed_hint||30e6))} at ${fmt(m.speed_hint)}/s</span>`+macFit(m.size)+`</div>`;
+  } else h+=`<div class="fit">${macFit(m.size)}</div>`;
+  if(m.benchmarks&&m.benchmarks.length){
+    h+=`<h3>Benchmarks ${m.benchmarks_from!==m.id?`<span class="n">· from base model ${esc(m.benchmarks_from)}</span>`:''}</h3><div class="ctable"><table class="bench"><tbody>`;
+    h+=m.benchmarks.map(b=>`<tr><td title="${esc(b.notes)}">${esc(b.benchmark)}${b.task?` <span class="mut">${esc(b.task)}</span>`:''}${b.verified?' <span class="pill good">verified</span>':''}${b.subtasks.length?`<div class="sub">${b.subtasks.slice(0,24).map(s=>`<span>${esc(s.task)} <b>${benchVal(s.value)}</b></span>`).join('')}${b.subtasks.length>24?`<span>+${b.subtasks.length-24} more</span>`:''}</div>`:''}</td><td class="r v">${benchVal(b.value)}</td></tr>`).join('');
+    h+=`</tbody></table></div><div class="hint">Self-reported on the model card unless marked verified. Hover a name for harness notes.</div>`;
+  } else h+=`<h3>Benchmarks</h3><div class="mut" style="font-size:13px">No structured eval results on this repo${m.base_chain&&m.base_chain.length?' or its base model':''}.</div>`;
+  (m.card_tables||[]).forEach((t,i)=>{
+    h+=`<details data-ck="${esc(m.id)}#${i}"><summary>Card table: ${esc(t.title||'untitled')} (${t.rows.length} rows)</summary><div class="ctable"><table><thead><tr>${t.head.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${t.rows.map(r=>`<tr>${r.map(x=>`<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+  });
+  if(m.tags&&m.tags.length) h+=`<div class="tags">${m.tags.map(t=>`<span class="pill lc">${esc(t)}</span>`).join('')}</div>`;
+  if(browse) h+=`<div class="actions"><button class="pri" data-queue="${esc(m.id)}" ${m.job_status&&['queued','preparing','running'].includes(m.job_status)?'disabled':''}>Queue download</button></div>`;
+  return h;
+}
+
+/* ---------- browser (search + preview as you type) ---------- */
+let pvTimer=null, pvSeq=0, lastPreview=null;
+async function runPreview(){
+  const q=$('#repo').value.trim(), seq=++pvSeq;
+  if(q.length<2){$('#preview').innerHTML='';lastPreview=null;return}
+  $('#preview').innerHTML=`<div class="mut" style="font-size:13px" role="status">Looking up “${esc(q)}”…</div>`;
+  try{
+    const r=await (await api(`/api/preview?q=${encodeURIComponent(q)}&lib=${encodeURIComponent($('#lib').value)}`)).json();
+    if(seq!==pvSeq)return; lastPreview=r; renderPreview();
+  }catch(e){if(seq===pvSeq)$('#preview').innerHTML=`<div class="err" role="alert">${esc(e.message)}</div>`}
+}
+function renderPreview(){
+  const r=lastPreview; if(!r){$('#preview').innerHTML='';return}
+  if(r.kind==='error') return $('#preview').innerHTML=`<div class="err" role="alert">${esc(r.error)}</div>`;
+  if(r.kind==='empty') return $('#preview').innerHTML='';
+  if(r.kind==='search'){
+    $('#preview').innerHTML=r.results.length?`<div class="results">${r.results.map(x=>`<button type="button" class="res" data-pick="${esc(x.id)}"><span class="id">${esc(x.id)}${x.gated?' <span class="pill warn">gated</span>':''}</span><span class="meta lib">${esc(x.library||'')} ${x.pipeline?'· '+esc(x.pipeline):''}</span><span class="meta"><span aria-hidden="true">↓</span><span class="sr">downloads</span> ${num(x.downloads)} · <span aria-hidden="true">♥</span><span class="sr">likes</span> ${num(x.likes)} · ${ago(x.lastModified)}</span></button>`).join('')}</div><div class="hint">Sorted by downloads. Pick one for details.</div>`
+      :`<div class="mut" style="font-size:13px" role="status">No models match “${esc(r.query)}”.</div>`;
+    return;
+  }
+  $('#preview').innerHTML=`<div class="card pcard">${modelCard(r,{browse:true})}</div>`;
+}
+$('#repo').addEventListener('input',()=>{clearTimeout(pvTimer);pvTimer=setTimeout(runPreview,450)});
+$('#lib').addEventListener('change',runPreview);
+$('#ram').value=ls.get('macRam')||'';
+$('#ram').addEventListener('input',()=>{ls.set('macRam',$('#ram').value);renderPreview();renderModels()});
+$('#preview').addEventListener('click',async e=>{
+  const p=e.target.closest('[data-pick]'); if(p){$('#repo').value=p.dataset.pick;$('#repo').focus();return runPreview()}
+  const q=e.target.closest('[data-queue]'); if(q) queue(q.dataset.queue);
+});
+async function queue(repo){
+  try{await post('/api/jobs',{repo,force:$('#force').checked});say('Queued '+repo);refresh();if(lastPreview&&lastPreview.id===repo){lastPreview.job_status='queued';renderPreview()}}
+  catch(err){say(err.message)}
+}
+$('#add').addEventListener('submit',e=>{e.preventDefault();const repo=$('#repo').value.trim();if(!repo)return;
+  if(lastPreview&&lastPreview.kind==='search'&&!/^[\w.-]+\/[\w.-]+$/.test(repo.replace(/^https?:\/\/(www\.)?huggingface\.co\//,'').split(/[?#]/)[0].split('/').slice(0,2).join('/'))){say('Pick a model from the results first');return}
+  queue(repo)});
+
+/* ---------- models in folder, with lazy details ---------- */
+let models=[]; const openModels=new Set(), details={};
+async function loadDetails(repo){
+  if(details[repo]&&details[repo]!=='err')return;
+  details[repo]='loading';renderModels();
+  try{const r=await (await api(`/api/preview?q=${encodeURIComponent(repo)}`)).json();details[repo]=r.kind==='model'?r:{error:r.error||'no details'}}
+  catch(e){details[repo]={error:e.message}}
+  renderModels();
+}
+function updBadge(m){
+  const u=m.update; if(m.busy) return ' <span class="pill running">downloading</span>';
+  if(m.partial) return ' <span class="pill">partial</span>';
+  if(!u) return '';
+  if(u.status==='update') return ' <span class="pill warn">update available</span>';
+  if(u.status==='current') return ' <span class="pill good" title="checked '+esc(ago(u.checked*1000))+'">up to date</span>';
+  if(u.status==='error') return ` <span class="pill bad" title="${esc(u.reason)}">check failed</span>`;
+  return '';
+}
+function localPanel(m){
+  const u=m.update||{}, sha=m.sha?`<span class="mono">${esc(m.sha.slice(0,12))}</span>`:'<span class="mut">unknown</span>';
+  let s=`<div class="local"><div class="upd ${u.status==='update'?'has':''}">Downloaded commit ${sha}${u.branch?` · tracking <span class="mono">${esc(u.branch)}</span>`:''}<br>`;
+  if(m.busy) s+='<span class="mut">Download in progress.</span>';
+  else if(m.partial) s+='<span class="mut">Incomplete download: resume or re-queue it from Downloads.</span>';
+  else if(u.status==='update') s+=`<b>Update available</b>: commit <span class="mono">${esc(u.remote_sha.slice(0,12))}</span> (${esc(ago(u.remote_date))}) · ${esc(u.changed)} changed, ${esc(u.added)} new, ${esc(u.removed)} removed · <b>${fmt(u.bytes)}</b> to download`
+    +(u.files&&u.files.length?`<div class="mut mono" style="font-size:11.5px;margin-top:3px;word-break:break-all">${u.files.map(esc).join(', ')}${u.changed+u.added>u.files.length?' …':''}</div>`:'');
+  else if(u.status==='current') s+=`<span class="mut">Up to date with the Hub (checked ${esc(ago(u.checked*1000))}).</span>`;
+  else if(u.status==='error') s+=`<span class="err">Update check failed: ${esc(u.reason)}</span>`;
+  else if(u.status==='unknown') s+=`<span class="mut">Can't check for updates: ${esc(u.reason)}.</span>`;
+  else s+='<span class="mut">Not checked yet.</span>';
+  s+=`</div><div class="actions" style="margin:0">`;
+  if(u.status==='update'&&!m.busy) s+=`<button class="pri sm" data-update="${esc(m.repo)}">Update</button>`;
+  s+=`<button class="sm danger" data-delete="${esc(m.name)}" ${m.busy?'disabled title="Cancel its download first"':''}>Delete…</button></div></div>`;
+  return s;
+}
+/* ---------- copy to Mac ---------- */
+const MAC_TARGETS={omlx:{label:'oMLX',base:'$HOME/.omlx/models'},lmstudio:{label:'LM Studio',base:'$HOME/.lmstudio/models'},custom:{label:'Custom folder'}};
+function shq(p){ // double-quote for zsh/bash; keep a leading $HOME expandable, escape everything else
+  const home=p.startsWith('$HOME'); const rest=home?p.slice(5):p;
+  return '"'+(home?'$HOME':'')+rest.replace(/[\\"`$]/g,'\\$&')+'"';
+}
+function macDest(m){
+  const t=ls.get('macTarget')||'omlx', [org,name]=(m.repo||('local/'+m.name)).split('/');
+  if(t!=='custom') return {dest:`${MAC_TARGETS[t].base}/${org}/${name}`,parent:`${MAC_TARGETS[t].base}/${org}`};
+  let c=(ls.get('macCustom')||'~/models').trim().replace(/\/+$/,'')||'~/models';
+  if(c==='~'||c.startsWith('~/')) c='$HOME'+c.slice(1);
+  return {dest:`${c}/${m.name}`,parent:c};
+}
+function macCommands(m){
+  const mac=(state&&state.mac)||{}, {dest,parent}=macDest(m);
+  const src=`${mac.mount||'/Volumes/files'}/${mac.subdir||'llms'}/${m.name}/`;
+  const cmds=[];
+  if(mac.smb_url) cmds.push(['Mount the share (Finder may ask for your share login once)',`open ${shq(mac.smb_url)}`]);
+  cmds.push(['Copy the model (safe to re-run: it picks up where it stopped)',
+    `mkdir -p ${shq(parent)} && rsync -a --progress --exclude .cache --exclude .hf-repo ${shq(src)} ${shq(dest+'/')}`]);
+  return cmds;
+}
+function macPanel(m,d){
+  const t=ls.get('macTarget')||'omlx', tags=(d&&d.tags)||[], warn=[];
+  if(m.busy||m.partial) warn.push('This download isn\'t finished yet: copy it once it completes.');
+  if(t==='lmstudio'&&tags.some(x=>/^oq/.test(x))) warn.push('This is an oQ checkpoint for oMLX; LM Studio can\'t load it. Use the oMLX target.');
+  if(d&&d.library&&!['mlx','gguf'].includes(d.library)&&t!=='custom') warn.push(`This is a ${d.library} model, not MLX/GGUF; ${MAC_TARGETS[t].label} may not run it.`);
+  let s=`<div class="mac" data-mac="${esc(m.name)}"><h3>Copy to Mac</h3><div class="opts" style="margin-top:0">
+    <label class="chk">Target <select data-mactarget>${Object.entries(MAC_TARGETS).map(([k,v])=>`<option value="${k}" ${k===t?'selected':''}>${v.label}</option>`).join('')}</select></label>
+    <label class="chk" ${t==='custom'?'':'hidden'}>Parent folder <input type="text" data-maccustom value="${esc(ls.get('macCustom')||'~/models')}" spellcheck="false" autocapitalize="off" style="width:220px;max-width:100%"></label>
+    ${macFit(m.size)}</div>`;
+  if(warn.length) s+=warn.map(w=>`<div class="warnline">${esc(w)}</div>`).join('');
+  s+=`<ol class="steps">${macCommands(m).map(([label,cmd])=>`<li><div class="mut" style="font-size:12.5px">${esc(label)}</div><div class="cmd"><pre class="mono">${esc(cmd)}</pre><button class="sm" data-copy>Copy</button></div></li>`).join('')}</ol>
+    <div class="hint">Run in Terminal on the Mac. ${t==='custom'?'':`${MAC_TARGETS[t].label} picks the model up from that folder.`} ${!(state&&state.mac&&state.mac.smb_url)?'Mount the files share in Finder first (MAC_SMB_URL isn\'t configured on the server).':''}</div></div>`;
+  return s;
+}
+function copyText(text){
+  const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select(); let ok=false; try{ok=document.execCommand('copy')}catch{} ta.remove(); return ok;
+}
+
+const CARET='<svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5l4.5 4.5L6 12.5"/></svg>';
+function renderModels(){
+  const box=$('#models');
+  // keep open <details> (card tables) intact across re-renders
+  const keep=new Set([...box.querySelectorAll('details[data-ck]')].filter(x=>x.open).map(x=>x.dataset.ck));
+  box.innerHTML=models.length?models.map(m=>{
+    const open=openModels.has(m.name), d=m.repo&&details[m.repo];
+    let row=`<tr class="m ${open?'open':''}" data-name="${esc(m.name)}"><td><button type="button" class="tog" data-toggle aria-expanded="${open}">${CARET}<span>${esc(m.name)}</span></button>${updBadge(m)}<div class="mrepo mono mut">${m.repo?esc(m.repo):'–'}</div></td><td class="r">${esc(m.files)}</td><td class="r">${fmt(m.size)}</td></tr>`;
+    if(open) row+=`<tr class="detail"><td colspan="3">${localPanel(m)}${macPanel(m,d&&typeof d==='object'&&!d.error?d:null)}${!m.repo?'<span class="mut">Not downloaded by this tool, so the source repo is unknown.</span>':d==='loading'||!d?'<span class="mut" role="status">Loading details…</span>':d.error?`<span class="err">${esc(d.error)}</span>`:modelCard(d)}</td></tr>`;
+    return row}).join(''):'<tr><td colspan="3" class="mut" style="padding:28px 8px;text-align:center">Folder is empty.</td></tr>';
+  box.querySelectorAll('details[data-ck]').forEach(x=>{if(keep.has(x.dataset.ck))x.open=true});
+}
+$('#checkupd').addEventListener('click',async()=>{try{await post('/api/updates/check');$('#updinfo').textContent='Checking…'}catch(err){say(err.message)}});
+$('#models').addEventListener('change',e=>{
+  if(e.target.matches('[data-mactarget]')){const name=e.target.closest('[data-mac]').dataset.mac;ls.set('macTarget',e.target.value);renderModels();
+    const sel=$('#models').querySelector(`[data-mac="${cssq(name)}"] [data-mactarget]`);if(sel)sel.focus()}
+});
+$('#models').addEventListener('input',e=>{
+  if(!e.target.matches('[data-maccustom]'))return;
+  ls.set('macCustom',e.target.value);
+  // update just the command text so the input keeps focus
+  const box=e.target.closest('[data-mac]'), m=models.find(x=>x.name===box.dataset.mac);
+  box.querySelectorAll('.cmd pre').forEach((pre,i)=>{const c=macCommands(m)[i];if(c)pre.textContent=c[1]});
+});
+/* delete confirmation: an in-page dialog that still requires typing the exact folder name */
+function askDelete(name,size){
+  const dlg=$('#deldlg');
+  if(typeof dlg.showModal!=='function')
+    return Promise.resolve(prompt(`Permanently delete "${name}" (${fmt(size)}) from the share?\nThis cannot be undone.\n\nType the folder name to confirm:`));
+  return new Promise(res=>{
+    const inp=$('#delinput'), go=$('#delgo'), form=$('#delform'), cancel=$('#delcancel');
+    $('#delname').textContent=name; $('#delsize').textContent=fmt(size); inp.value=''; go.disabled=true;
+    const onInput=()=>{go.disabled=inp.value!==name};
+    const onSubmit=e=>{e.preventDefault();if(inp.value===name)dlg.close('ok')};
+    const onCancel=()=>dlg.close('');
+    const onClose=()=>{inp.removeEventListener('input',onInput);form.removeEventListener('submit',onSubmit);cancel.removeEventListener('click',onCancel);dlg.removeEventListener('close',onClose);
+      res(dlg.returnValue==='ok'?inp.value:null)};
+    inp.addEventListener('input',onInput);form.addEventListener('submit',onSubmit);cancel.addEventListener('click',onCancel);dlg.addEventListener('close',onClose);
+    dlg.returnValue='';dlg.showModal();inp.focus();
+  });
+}
+$('#models').addEventListener('click',async e=>{
+  const cb=e.target.closest('[data-copy]');
+  if(cb){const ok=copyText(cb.previousElementSibling.textContent);cb.textContent=ok?'Copied':'Press ⌘C';
+    if(!ok){const r=document.createRange();r.selectNodeContents(cb.previousElementSibling);const s=getSelection();s.removeAllRanges();s.addRange(r)}
+    setTimeout(()=>cb.textContent='Copy',1600);return}
+  const ub=e.target.closest('[data-update]');
+  if(ub){ub.disabled=true;try{await post('/api/jobs',{repo:ub.dataset.update,update:true,force:$('#force').checked});say('Queued update for '+ub.dataset.update);refresh()}catch(err){say(err.message);ub.disabled=false}return}
+  const db=e.target.closest('[data-delete]');
+  if(db){const name=db.dataset.delete,m=models.find(x=>x.name===name);
+    const typed=await askDelete(name,m&&m.size);
+    if(typed===null)return;
+    if(typed!==name){say('Not deleted: the name you typed did not match.');return}
+    try{const r=await post('/api/models/delete',{name,confirm:typed});say(`Deleted ${r.deleted}, freed ${fmt(r.freed)}`);openModels.delete(name);modelsSig='';refresh()}catch(err){say(err.message)}
+    return}
+  const tg=e.target.closest('[data-toggle]');
+  if(!tg&&e.target.closest('a,summary,details,button,select,input,label,pre'))return;
+  const tr=e.target.closest('tr.m'); if(!tr)return;
+  const n=tr.dataset.name, m=models.find(x=>x.name===n);
+  if(openModels.has(n))openModels.delete(n);else{openModels.add(n);if(m&&m.repo)loadDetails(m.repo)}
+  renderModels();
+  if(tg){const b=$('#models').querySelector(`tr.m[data-name="${cssq(n)}"] [data-toggle]`);if(b)b.focus()}
+});
+
+/* ---------- polling ---------- */
+let modelsSig='';
+async function refresh(){
+  try{
+    const s=await (await api('/api/state')).json();
+    state=s;
+    $('#logout').hidden=!s.auth;
+    $('#dir').textContent=s.llm_dir;
+    if($('#msg').textContent.startsWith('Lost'))say('');
+    $('#conn').className='conn ok';$('#conn').textContent='Live';
+    const d=s.disk, up=d.used/d.total*100, low=d.free<d.min_free*3;
+    $('#disktxt').textContent=`${fmt(d.free)} free of ${fmt(d.total)}`;
+    $('#disktxt').className='free'+(low?' low':'');
+    $('#diskbar').className='bar'+(low?' full':''); $('#diskbar i').style.width=up+'%';
+    renderJobs(s);
+    $('#updinfo').textContent=s.updates_checking?'Checking…':s.updates_checked?'Last checked '+ago(s.updates_checked*1000):'';
+    $('#checkupd').disabled=!!s.updates_checking;
+    const nu=s.models.filter(m=>m.update&&m.update.status==='update'&&!m.busy).length, nl=$('#n-library');
+    nl.hidden=!nu; nl.textContent=nu; nl.setAttribute('aria-label',nu+(nu===1?' update available':' updates available'));
+    const sig=JSON.stringify(s.models.map(m=>[m.name,m.files,m.size,m.partial,m.busy,m.sha,m.update&&[m.update.status,m.update.remote_sha]]));
+    // only re-render the table when something changed, so expanded rows, inputs and open <details> stay put
+    if(sig!==modelsSig){modelsSig=sig;models=s.models;renderModels()}
+  }catch(e){say('Lost connection to server, retrying…');$('#conn').className='conn lost';$('#conn').textContent='Offline'}
+}
+/* ---------- settings: token, speed, logout ---------- */
+function fillSettings(v){
+  const t=v.token;
+  $('#tokstatus').innerHTML=t.set?`<span class="pill good">set</span> Token set${t.user?` for <b>${esc(t.user)}</b>`:''}${t.source==='environment'?' (from the server environment file)':''}.${t.error?` <span class="err">${esc(t.error)}</span>`:''}`:'<span class="pill">none</span> No token set: public repos only.';
+  $('#tokclear').hidden=!(t.set&&t.source==='settings');
+  const sp=v.speed;
+  $('#cap').value=sp.limit_mbps; $('#qon').checked=sp.quiet.enabled; $('#qstart').value=sp.quiet.start; $('#qend').value=sp.quiet.end;
+  $('#qmode').value=sp.quiet.mode; $('#qcap').value=sp.quiet.limit_mbps; $('#qcapwrap').hidden=sp.quiet.mode==='pause';
+  $('#throttlenow').textContent=(v.throttle.reason||'no limit')+'.';
+}
+async function loadSettings(){try{fillSettings(await (await api('/api/settings')).json())}catch(e){$('#setmsg').textContent=e.message}}
+$('#qmode').addEventListener('change',()=>{$('#qcapwrap').hidden=$('#qmode').value==='pause'});
+$('#tokform').addEventListener('submit',async e=>{e.preventDefault();const tok=$('#tok').value.trim();if(!tok)return;
+  $('#setmsg').textContent='Checking token with Hugging Face…';
+  try{fillSettings(await post('/api/settings/token',{token:tok}));$('#tok').value='';$('#setmsg').textContent='Token saved.'}catch(err){$('#setmsg').textContent=err.message}});
+$('#tokclear').addEventListener('click',async()=>{if(!confirm('Remove the saved Hugging Face token?'))return;
+  try{fillSettings(await post('/api/settings/token/clear'));$('#setmsg').textContent='Token removed.'}catch(err){$('#setmsg').textContent=err.message}});
+$('#speedform').addEventListener('submit',async e=>{e.preventDefault();
+  try{fillSettings(await post('/api/settings/speed',{limit_mbps:+$('#cap').value||0,quiet:{enabled:$('#qon').checked,start:$('#qstart').value,end:$('#qend').value,mode:$('#qmode').value,limit_mbps:+$('#qcap').value||0}}));$('#setmsg').textContent='Speed settings saved and applied.'}
+  catch(err){$('#setmsg').textContent=err.message}});
+$('#logout').addEventListener('click',async()=>{try{await post('/api/logout')}catch{} location.href='/login'});
+
+showTab(ls.get('uiTab')||'downloads');
+refresh();setInterval(refresh,2000);
+</script>
+</body>
+</html>

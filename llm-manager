@@ -1,0 +1,21 @@
+#!/bin/sh
+# llm-manager CLI: passwd | set-token | clear-token | status
+# Installed as /usr/local/bin/llm-manager inside the container. Runs as the service user
+# with the same environment as the service, so files land with the right owner.
+set -a
+[ -r /etc/llm-manager/env ] && . /etc/llm-manager/env
+set +a
+: "${STATE_DIR:=/var/lib/llm-manager}"
+: "${RUN_USER:=nas}"
+export STATE_DIR
+cd / || exit 1
+PY=/opt/llm-manager/venv/bin/python
+APP=/opt/llm-manager/server.py
+case "${1:-}" in
+  passwd|set-token|clear-token|status) ;;
+  *) echo "usage: llm-manager passwd | set-token | clear-token | status" >&2; exit 2 ;;
+esac
+if [ "$(id -u)" = 0 ]; then
+  exec runuser -p -u "$RUN_USER" -- "$PY" "$APP" "$@"
+fi
+exec "$PY" "$APP" "$@"

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local runs (quick start) and anything holding real data or secrets
+models/
+state/
+env
+.env
+.env.*
+!env.example
+hf_token
+auth.json
+sessions.json
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
