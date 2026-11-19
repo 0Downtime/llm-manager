@@ -5,6 +5,8 @@ so typing in the UI doesn't hammer the Hub.
 """
 import json, os, re, threading, time, urllib.error, urllib.parse, urllib.request
 
+import quants
+
 HUB = "https://huggingface.co"
 TTL = 900                      # seconds to cache Hub responses
 _cache, _clock = {}, threading.Lock()
@@ -244,6 +246,7 @@ def model(repo):
             "license": card.get("license_name") or card.get("license"), "gated": info.get("gated"),
             "tags": [t for t in info.get("tags") or [] if ":" not in t][:16],
             "size": size, "file_count": len(files), "weight_files": len(weights),
+            **(quants.describe({f["path"]: f.get("size") or 0 for f in files}) or {"variants": None}),
             "params": None if quantized else params, "base_params": base_params if quantized else None,
             "quantized": quantized, "base_chain": base_chain,
             "config": _config_stats(repo), "description": desc, "card_tables": tables,

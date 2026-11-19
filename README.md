@@ -16,6 +16,8 @@ on your Mac with one pasted command.
   Range requests after a restart, reboot or network drop. Every file is verified against the
   Hugging Face SHA-256 before it's moved into place, and a download stays on one commit.
 - **Live progress.** Overall and per-file bytes, speed and ETA, updated every 2 seconds.
+- **Model cards.** Every model in the Library gets a card with generated art (its own gradient
+  and pattern, tinted by model family), its quant, size and the release commit it came from.
 - **Library.** Lists every model in the folder with update checks. Updates re-download only the
   files that changed. Deleting a model requires typing its name.
 - **Copy to Mac.** Ready-to-paste commands that copy a model from the share into oMLX, LM Studio or
@@ -41,6 +43,7 @@ on your Mac with one pasted command.
 - [Install on a Linux server](#install-on-a-linux-server)
 - [Install in a Proxmox LXC](#install-in-a-proxmox-lxc)
 - [Configuration](#configuration)
+- [CI/CD](#cicd)
 - [Using it](#using-it)
 - [CLI](#cli)
 - [How it works](#how-it-works)
@@ -175,6 +178,10 @@ effect immediately.
 
 ---
 
+## CI/CD
+Pull requests run tests on GitHub; a merge to `main` deploys to the container through a self-hosted
+runner inside it, with an automatic rollback if the service doesn't come up. See [docs/CI.md](docs/CI.md).
+
 ## Using it
 
 ### Browse and download
@@ -189,6 +196,15 @@ base-model chain, license, downloads and likes. Badges show:
 - whether it fits on the share (keeping `MIN_FREE_GB` spare)
 - the estimated download time
 - whether it fits in your Mac's memory (set **Mac memory** once; it's remembered in your browser)
+
+**Pick a quant (GGUF repos).** Repos such as `unsloth/…-GGUF` or `bartowski/…-GGUF` hold many
+quants of one model (Q2_K … Q8_0, BF16). The card lists them with their sizes and downloads only
+the one you pick, plus the shared files (README, config, and one vision projector if the model has
+one). It preselects **Q4_K_M** (or the nearest 4-bit quant); with **Mac memory** set and that quant
+too big, it picks the largest quant that fits. Download size, time and the fit badges follow the
+quant you pick. Each quant gets its own folder (`<name>-<QUANT>`), so you can keep several side by
+side, and update checks only look at that quant's files. MLX and Transformers repos hold one
+quantization per repo and are downloaded whole, as before.
 
 **Benchmarks** come from the eval results the repo publishes on Hugging Face. Quantized repos
 rarely have their own, so the app follows the `base_model` chain and labels where the scores came
@@ -293,7 +309,7 @@ Every endpoint needs a session cookie (from `POST /api/login`), except `/login`,
 |---|---|
 | `GET /api/state` | Jobs with live progress, models with update status, disk, throttle, Mac config |
 | `GET /api/preview?q=&lib=` | Search results, or a model card with stats and benchmarks |
-| `POST /api/jobs` `{repo, force?, update?}` | Queue a download or an update |
+| `POST /api/jobs` `{repo, variant?, force?, update?, name?}` | Queue a download (`variant`: one quant of a GGUF repo) or an update (`name`: the Library folder) |
 | `POST /api/jobs/<id>/cancel` \| `retry` `{force?}` \| `remove` | Job actions |
 | `GET /api/jobs/<id>/log` | Job log (text) |
 | `POST /api/updates/check` | Start an update check |
