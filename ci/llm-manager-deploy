@@ -25,9 +25,9 @@ mkdir -p "$STAGE/web"
 for f in "${FILES[@]}" llm-manager requirements.txt; do install -m 644 "$SRC/$f" "$STAGE/$f"; done
 # compile check only: nothing from the new code runs as root
 "$PY" - "$STAGE" <<'PYEOF'
-import py_compile, sys, pathlib
+import sys, pathlib
 for p in pathlib.Path(sys.argv[1]).glob("*.py"):
-    py_compile.compile(str(p), cfile="/dev/null", doraise=True)
+    compile(p.read_bytes(), str(p), "exec")  # syntax check in memory; writes no .pyc
 PYEOF
 
 # dependencies: wheels only, so no package build script runs as root
