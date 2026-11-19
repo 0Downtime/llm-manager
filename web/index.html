@@ -507,14 +507,19 @@ function chooseVariant(m){
 }
 function variantLabel(x,m){
   if(x.original)return 'Original weights (safetensors)';
-  return x.id+(x.quant?'':' (extra file)')+(x.id===m.default_variant?' ★':'');
+  if(!x.quant)return x.id+(/patch/i.test(x.id)?' (patch file)':' (separate model)');
+  return x.id+(x.id===m.default_variant?' ★':'');
 }
-const FITTXT={good:'fits',warn:'tight',bad:'too big'};
 function quantPicker(m,cur){
-  const opts=m.variants.map(x=>{const f=fitLevel(x.size);
-    return `<option value="${esc(x.id)}" ${x.id===cur?'selected':''}>${esc(variantLabel(x,m))} · ${fmt(x.size)}${f?' · '+FITTXT[f]:''}</option>`}).join('');
+  const opt=x=>{const f=fitLevel(x.size);
+    return `<option value="${esc(x.id)}" ${x.id===cur?'selected':''}>${esc(variantLabel(x,m))} · ${fmt(x.size)}${f?' · '+FITTXT[f]:''}</option>`};
+  // real quants of the model first; patch files and other models bundled in the repo go in their own group
+  const main=m.variants.filter(x=>x.quant||x.original), extra=m.variants.filter(x=>!x.quant&&!x.original);
+  const opts=extra.length?`<optgroup label="Quants of this model (pick one)">${main.map(opt).join('')}</optgroup><optgroup label="Other files in this repo (not needed to run a quant)">${extra.map(opt).join('')}</optgroup>`:main.map(opt).join('');
+  const sel=m.variants.find(x=>x.id===cur), isExtra=sel&&!sel.quant&&!sel.original;
   return `<div class="qpick"><label for="qsel">Quant</label><select id="qsel" data-variant>${opts}</select>
-    <div class="hint">${m.variants.length} quants in this repo; only the one you pick is downloaded. ★ ${esc(m.default_variant)} is the usual size/quality balance; bigger = closer to the original.</div></div>`;
+    <div class="hint">Pick <b>one</b>: each quant is a complete model on its own, and only the one you pick is downloaded. ★ ${esc(m.default_variant)} is the usual size/quality balance; bigger = closer to the original.${extra.length?` The ${extra.length} "other files" are extras some repos ship (patch files, a different model); you don't need them with a quant.`:''}</div>
+    ${isExtra?'<div class="warnline" style="flex-basis:100%">This is not a quant of the model: it is a patch file or a different model bundled in the repo. To run the model, pick one of the quants above.</div>':''}</div>`;
 }
 function macFit(size){
   const ram=parseFloat($('#ram').value), lvl=fitLevel(size);if(!lvl)return '';
