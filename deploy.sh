@@ -15,7 +15,7 @@ BOOTSTRAP=0
 
 cd "$(dirname "$0")"
 APP_FILES=(server.py downloader.py hfinfo.py quants.py auth.py web/index.html web/login.html)
-for f in "${APP_FILES[@]}" llm-manager llm-manager.service env.example; do
+for f in "${APP_FILES[@]}" llm-manager llm-manager.service env.example ci/llm-manager-deploy; do
   [[ -f $f ]] || { echo "missing $f" >&2; exit 1; }
 done
 python3 -m py_compile server.py downloader.py hfinfo.py quants.py auth.py
@@ -23,7 +23,7 @@ python3 -m py_compile server.py downloader.py hfinfo.py quants.py auth.py
 echo "==> deploying to CT $CTID on $PXE_HOST"
 # 1) upload the files to a temp dir on the Proxmox node, 2) run the install script there
 RT=$(ssh "$PXE_HOST" mktemp -d)
-COPYFILE_DISABLE=1 tar czf - "${APP_FILES[@]}" llm-manager llm-manager.service env.example |
+COPYFILE_DISABLE=1 tar czf - "${APP_FILES[@]}" llm-manager llm-manager.service env.example -C ci llm-manager-deploy |
   ssh "$PXE_HOST" "tar xzf - -C '$RT' 2>/dev/null"
 ssh "$PXE_HOST" "CTID=$CTID BOOTSTRAP=$BOOTSTRAP T='$RT' APP_FILES='${APP_FILES[*]}' bash -s" <<'REMOTE'
 set -euo pipefail
@@ -41,6 +41,7 @@ fi
 run mkdir -p /opt/llm-manager/web /etc/llm-manager
 for f in $APP_FILES; do pct push "$CTID" "$f" "/opt/llm-manager/$f"; done
 pct push "$CTID" llm-manager /usr/local/bin/llm-manager --perms 755
+pct push "$CTID" llm-manager-deploy /usr/local/sbin/llm-manager-deploy --perms 755  # what CI deploys with (docs/CI.md)
 run ln -sf /usr/local/bin/llm-manager /usr/sbin/llm-manager  # `pct exec` uses a PATH without /usr/local/bin
 pct push "$CTID" llm-manager.service /etc/systemd/system/llm-manager.service
 run chmod 700 /etc/llm-manager

@@ -16,6 +16,8 @@ on your Mac with one pasted command.
   Range requests after a restart, reboot or network drop. Every file is verified against the
   Hugging Face SHA-256 before it's moved into place, and a download stays on one commit.
 - **Live progress.** Overall and per-file bytes, speed and ETA, updated every 2 seconds.
+- **Model cards.** Every model in the Library gets a card with generated art (its own gradient
+  and pattern, tinted by model family), its quant, size and the release commit it came from.
 - **Library.** Lists every model in the folder with update checks. Updates re-download only the
   files that changed. Deleting a model requires typing its name.
 - **Copy to Mac.** Ready-to-paste commands that copy a model from the share into oMLX, LM Studio or
@@ -41,6 +43,7 @@ on your Mac with one pasted command.
 - [Install on a Linux server](#install-on-a-linux-server)
 - [Install in a Proxmox LXC](#install-in-a-proxmox-lxc)
 - [Configuration](#configuration)
+- [CI/CD](#cicd)
 - [Using it](#using-it)
 - [CLI](#cli)
 - [How it works](#how-it-works)
@@ -174,6 +177,10 @@ Settings changed in the UI (speed cap, quiet hours, token) are stored in `STATE_
 effect immediately.
 
 ---
+
+## CI/CD
+Pull requests run tests on GitHub; a merge to `main` deploys to the container through a self-hosted
+runner inside it, with an automatic rollback if the service doesn't come up. See [docs/CI.md](docs/CI.md).
 
 ## Using it
 

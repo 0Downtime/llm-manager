@@ -68,15 +68,15 @@ def group(files):
     {"shared": [paths], "variants": {id: [paths]}}"""
     shared, ggufs, mmproj, other_weights, imatrix = [], [], {}, [], []
     for p in files:
-        if GGUF.search(p):
+        if IMATRIX.search(p):  # also imatrix *.gguf files: calibration data, not a model
+            imatrix.append(p)
+        elif GGUF.search(p):
             if MMPROJ.search(p):
                 mmproj.setdefault(quant_of(p), []).append(p)
             else:
                 ggufs.append((p, *parse(p)))
         elif WEIGHTS.search(p):
             other_weights.append(p)
-        elif IMATRIX.search(p):
-            imatrix.append(p)
         else:
             shared.append(p)
     # some repos also carry a different model (e.g. an eagle3 draft model next to gpt-oss):
@@ -86,9 +86,23 @@ def group(files):
         if base is not None:
             by_base[base] = by_base.get(base, 0) + _size(files[p])
     main = max(by_base, key=by_base.get) if by_base else None
-    variants = {}
+    # the same quant can ship twice in different folders (e.g. `Q4_K_XL/` and a re-made `Q4_K_XL-V2/`):
+    # those are separate downloads, named by folder
+    folders = {}
     for p, q, base, stem in ggufs:
-        variants.setdefault(q if base == main else stem, []).append(p)
+        if base == main:
+            folders.setdefault(q, set()).add(p.rpartition("/")[0])
+    variants, quant_of_key = {}, {}
+    for p, q, base, stem in ggufs:
+        if base != main:
+            k = stem
+        elif len(folders[q]) > 1:
+            k = p.rpartition("/")[0].rpartition("/")[2] or q
+        else:
+            k = q
+        variants.setdefault(k, []).append(p)
+        if base == main:
+            quant_of_key[k] = q
     if other_weights and variants:
         variants[ORIGINAL] = other_weights
     else:
@@ -98,7 +112,8 @@ def group(files):
     if mmproj:  # vision models ship the projector in several precisions; one is enough
         pick = next((k for k in MMPROJ_PREF if k in mmproj), sorted(mmproj)[0])
         shared += mmproj[pick]
-    return {"shared": sorted(shared), "variants": {k: sorted(v) for k, v in variants.items()}}
+    return {"shared": sorted(shared), "variants": {k: sorted(v) for k, v in variants.items()},
+            "quants": quant_of_key}  # variant id -> its quant, for quants of the main model only
 
 
 def default(variants):
@@ -120,8 +135,8 @@ def describe(files):
     for k, paths in g["variants"].items():
         out.append({"id": k, "size": shared_size + sum(_size(files[p]) for p in paths),
                     "files": len(g["shared"]) + len(paths), "weight_files": len(paths),
-                    "bits": bits(k), "original": k == ORIGINAL,
-                    "quant": k != ORIGINAL and bool(QUANT.fullmatch(k))})  # False: another model's file
+                    "bits": bits(g["quants"].get(k, k)), "original": k == ORIGINAL,
+                    "quant": k in g["quants"]})  # False: another model's file
     out.sort(key=lambda v: (v["size"], v["id"]))
     return {"variants": out, "default_variant": default(g["variants"]), "shared_size": shared_size}
 

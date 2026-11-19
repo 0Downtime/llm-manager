@@ -1,0 +1,72 @@
+# Tests on every PR and push; a push to main (a merged PR) deploys to the llm-manager container.
+# The deploy runs on a self-hosted runner inside that container (label `llm-manager`, ci/setup-runner.sh),
+# which may only run ci/llm-manager-deploy as root: it installs the code and rolls back if the service
+# doesn't come up. This repo is public, so pull requests never reach the self-hosted runner. docs/CI.md
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy main without a new push (tests still run first)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # one run per PR or branch; a newer push cancels an older PR run, never a deploy
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"   # what the container runs (Debian 13)
+      - run: pip install -r requirements.txt
+      - name: Compile
+        run: python -m py_compile *.py
+      - name: Unit tests
+        run: python -m unittest discover -s tests -t . -v
+      - name: Shell scripts parse
+        run: bash -n deploy.sh ci/llm-manager-deploy ci/setup-runner.sh llm-manager
+      - name: Smoke test (server starts, UI and API answer)
+        run: |
+          mkdir -p /tmp/lm/models /tmp/lm/state
+          LLM_AUTH=off ALLOWED_NETS=127.0.0.0/8 LLM_DIR=/tmp/lm/models STATE_DIR=/tmp/lm/state PORT=8099 \
+            python server.py serve > /tmp/lm/server.log 2>&1 &
+          for i in $(seq 1 20); do curl -fs -o /dev/null http://127.0.0.1:8099/api/state && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8099/api/state | python -c 'import json,sys; s=json.load(sys.stdin); assert "models" in s and "jobs" in s'
+          curl -fsS http://127.0.0.1:8099/ | grep -q 'id="gallery"'
+      - name: Server log
+        if: failure()
+        run: cat /tmp/lm/server.log || true
+
+  deploy:
+    needs: test
+    if: >-
+      github.repository == '0Downtime/llm-manager' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    runs-on: [self-hosted, llm-manager]
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-llm-manager
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Stamp the release
+        run: echo "$(git rev-parse --short=12 HEAD) $(date -u +%FT%TZ)" > .release
+      - name: Install and restart (rolls back on failure)
+        run: sudo -n /usr/local/sbin/llm-manager-deploy "$GITHUB_WORKSPACE"

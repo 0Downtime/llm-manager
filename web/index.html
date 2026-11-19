@@ -191,6 +191,21 @@ tr.open .caret{transform:rotate(90deg)}
 .qpick select{flex:0 1 340px;min-width:0;font-family:var(--mono);font-size:13px}
 .qpick .hint{margin:0;flex:1 1 220px}
 
+/* ---------- model cards (Library gallery) ---------- */
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:0 0 18px}
+.mcard{display:flex;flex-direction:column;text-align:left;padding:0;border:1px solid var(--line);border-radius:16px;background:var(--card);color:inherit;font:inherit;cursor:pointer;overflow:hidden;box-shadow:var(--shadow);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease}
+.mcard:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--acc-text) 45%,var(--line));box-shadow:0 14px 34px -20px rgba(0,0,0,.55)}
+.mcard.sel{border-color:var(--acc-text)}
+.mcard .art{position:relative;display:block;aspect-ratio:16/7;background:#222}
+.mcard .art svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.mcard .body{display:flex;flex-direction:column;gap:6px;padding:12px 14px 13px;min-width:0}
+.mcard .ttl{font-weight:700;font-size:15px;line-height:1.25;letter-spacing:-.01em;overflow-wrap:anywhere}
+.mcard .org{font-family:var(--mono);font-size:11.5px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mcard .chips{display:flex;flex-wrap:wrap;gap:5px}
+.mcard .rel{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--mut);border-top:1px dashed var(--line);padding-top:7px;margin-top:2px;font-variant-numeric:tabular-nums}
+.mcard .rel b{font-family:var(--mono);font-weight:600;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.mcard{transition:none}.mcard:hover{transform:none}}
+
 /* ---------- model card ---------- */
 .mhead{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .mhead .repo{font-size:18px;letter-spacing:-.015em;color:var(--ink)}
@@ -310,6 +325,7 @@ dialog .actions{justify-content:flex-end;margin-top:18px}
   <section id="p-library" role="tabpanel" aria-labelledby="tab-library" hidden>
     <div class="phead"><div><h2>Library</h2><div class="sub">Models in the folder. Select one for stats, benchmarks and copy-to-Mac commands.</div></div>
       <div class="libtools"><span class="mut" style="font-size:12.5px" id="updinfo" role="status"></span><button class="btn" id="checkupd" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-2.6-5.9M20 4v5h-5"/></svg>Check for updates</button></div></div>
+    <div class="gallery" id="gallery" aria-label="Model cards"></div>
     <div class="card tcard"><table class="mtable">
       <thead><tr><th>Folder / repo</th><th class="r c-files">Files</th><th class="r c-size">Size</th></tr></thead>
       <tbody id="models"></tbody>
@@ -672,6 +688,63 @@ function copyText(text){
   document.body.appendChild(ta); ta.select(); let ok=false; try{ok=document.execCommand('copy')}catch{} ta.remove(); return ok;
 }
 
+/* ---------- model cards: generated art per model, so each release is recognisable at a glance ---------- */
+// first match wins: a DeepSeek distill of Qwen is a DeepSeek release
+const FAMILIES=[[/deepseek/i,'DeepSeek',228],[/qwen|qwq/i,'Qwen',262],[/llama/i,'Llama',214],[/gemma/i,'Gemma',198],[/mi[sx]tral|devstral|magistral|ministral|codestral/i,'Mistral',22],
+  [/phi-?\d/i,'Phi',188],[/glm/i,'GLM',158],[/gpt-oss/i,'gpt-oss',146],[/kimi/i,'Kimi',340],[/minimax/i,'MiniMax',318],
+  [/granite/i,'Granite',205],[/smol/i,'SmolLM',40],[/hermes/i,'Hermes',280],[/nemotron/i,'Nemotron',96],[/olmo/i,'OLMo',330],[/command|aya/i,'Cohere',12],
+  [/ernie/i,'ERNIE',230],[/hunyuan/i,'Hunyuan',190],[/seed/i,'Seed',170],[/jamba/i,'Jamba',300],[/falcon/i,'Falcon',48],[/whisper/i,'Whisper',170]];
+function hashStr(t){let h=2166136261;for(const c of String(t)){h^=c.codePointAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function modelFacts(m){
+  const id=m.repo||m.name, [org,nm]=id.includes('/')?id.split('/'):['',id];
+  const f=FAMILIES.find(([re])=>re.test(id));
+  const q=m.variant||(id.match(/(?:^|[-_])((?:UD-)?(?:I?Q\d(?:_[A-Z0-9]+)*|BF16|F16|FP8|MXFP4|AWQ|GPTQ|NVFP4))(?:$|[-_])/i)||[])[1]
+    ||((id.match(/(\d+)[-_]?bits?/i)||[])[1]?id.match(/(\d+)[-_]?bits?/i)[1]+'-bit':null)||(/mlx/i.test(id)?'MLX':null);
+  const params=(nm.match(/(?:^|[-_])(\d+(?:\.\d+)?[BM])(?:-A\d+(?:\.\d+)?B)?(?=$|[-_])/i)||[])[0];
+  const flags=[/abliterat|uncensor/i.test(id)&&'abliterated',/instruct|-it(?:$|[-_])|chat/i.test(id)&&'instruct',/think|reason|r1(?:$|[-_])/i.test(id)&&'reasoning',/coder|code/i.test(id)&&'code',/vl(?:$|[-_])|vision/i.test(id)&&'vision'].filter(Boolean);
+  return {org,name:nm,family:f?f[1]:null,hue:f?f[2]:hashStr(org||nm)%360,quant:q,params:params?params.replace(/^[-_]/,''):null,flags};
+}
+function modelArt(m,x){
+  const h=hashStr((m.repo||m.name)+'|'+(m.variant||'')), hue=x.hue, h2=(hue+28+h%36)%360, uid='a'+h.toString(36);
+  const sat=62+h%18, mono=(x.family||x.name).replace(/[^A-Za-z0-9]/g,'').slice(0,2)||'··';
+  const kind=(h>>>8)%4, rnd=i=>((h>>>(i%24))^Math.imul(i+1,2654435761))>>>0;
+  let pat='';
+  if(kind===0){for(let i=0;i<7;i++)pat+=`<circle cx="${290+rnd(3)%30}" cy="${-10+rnd(5)%30}" r="${30+i*26}" fill="none" stroke="#fff" stroke-opacity="${.22-i*.025}" stroke-width="${1.5+i*.4}"/>`}
+  else if(kind===1){for(let i=-4;i<16;i++)pat+=`<path d="M${i*28} 160 L${i*28+120} 0" stroke="#fff" stroke-opacity="${i%3?.08:.18}" stroke-width="${i%3?6:2}"/>`}
+  else if(kind===2){for(let r=0;r<7;r++)for(let c=0;c<17;c++){const v=(rnd(r*17+c)%100)/100;if(v>.35)pat+=`<circle cx="${12+c*19+(r%2)*9}" cy="${12+r*20}" r="${1+v*3.2}" fill="#fff" fill-opacity="${.08+v*.22}"/>`}}
+  else{for(let i=0;i<6;i++){const y=30+i*20,a=10+rnd(i)%18,k=60+rnd(i+9)%60;pat+=`<path d="M-10 ${y} C ${k} ${y-a}, ${k+80} ${y+a}, 170 ${y} S ${330-k/2} ${y-a}, 340 ${y}" fill="none" stroke="#fff" stroke-opacity="${.1+i*.035}" stroke-width="${1.4+i*.5}"/>`}}
+  const tag=x.quant?esc(String(x.quant).toUpperCase()):'MODEL', tw=Math.max(44,tag.length*7.4+18);
+  return `<svg viewBox="0 0 320 140" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${esc((x.family||x.name)+' art')}">
+<defs><linearGradient id="${uid}g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} ${sat}% 52%)"/><stop offset=".55" stop-color="hsl(${(hue+h2)/2|0} ${sat}% 38%)"/><stop offset="1" stop-color="hsl(${h2} ${sat+8}% 20%)"/></linearGradient>
+<radialGradient id="${uid}r" cx=".85" cy=".1" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+<rect width="320" height="140" fill="url(#${uid}g)"/><rect width="320" height="140" fill="url(#${uid}r)"/>${pat}
+<text x="306" y="128" text-anchor="end" font-family="system-ui,-apple-system,sans-serif" font-weight="800" font-size="76" fill="#fff" fill-opacity=".2" letter-spacing="-4">${esc(mono)}</text>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" font-weight="700"><rect x="12" y="12" rx="7" width="${tw}" height="22" fill="#000" fill-opacity=".38"/><text x="${12+tw/2}" y="27" text-anchor="middle" fill="#fff">${tag}</text>
+${x.params?`<rect x="${18+tw}" y="12" rx="7" width="${x.params.length*7.4+16}" height="22" fill="#fff" fill-opacity=".85"/><text x="${18+tw+(x.params.length*7.4+16)/2}" y="27" text-anchor="middle" fill="#111">${esc(x.params.toUpperCase())}</text>`:''}</g>
+<text x="14" y="124" font-family="system-ui,-apple-system,sans-serif" font-weight="750" font-size="15" fill="#fff" fill-opacity=".92">${esc(x.family||'')}</text></svg>`;
+}
+function modelTile(m){
+  const x=modelFacts(m), sha=m.sha?m.sha.slice(0,7):null, d=m.repo&&details[m.repo], created=d&&typeof d==='object'&&d.created;
+  const chips=[x.family&&`<span class="pill lc">${esc(x.family)}</span>`,x.quant&&`<span class="pill info lc">${esc(x.quant)}</span>`,`<span class="pill lc">${fmt(m.size)}</span>`,
+    ...x.flags.map(f=>`<span class="pill lc">${esc(f)}</span>`)].filter(Boolean).join('');
+  return `<button type="button" class="mcard ${openModels.has(m.name)?'sel':''}" data-card="${esc(m.name)}" aria-label="${esc(m.name)}: show details">
+<span class="art">${modelArt(m,x)}</span><span class="body"><span class="ttl">${esc(x.name)}</span><span class="org">${esc(x.org||'local folder')}${m.variant?' · '+esc(m.variant):''}</span>
+<span class="chips">${chips}${updBadge(m)}</span>
+<span class="rel"><span>${sha?`release <b>${esc(sha)}</b>`:'release unknown'}${created?` · ${esc(ago(created))}`:''}</span><span>${m.mtime?'pulled '+esc(ago(m.mtime*1000)):''}</span></span></span></button>`;
+}
+function renderGallery(){
+  const g=$('#gallery'); if(!g)return;
+  g.innerHTML=models.filter(m=>!m.partial&&!m.busy).map(modelTile).join('');
+  g.hidden=!g.innerHTML;
+}
+$('#gallery').addEventListener('click',e=>{
+  const c=e.target.closest('[data-card]'); if(!c)return;
+  const n=c.dataset.card, m=models.find(x=>x.name===n);
+  openModels.add(n); if(m&&m.repo)loadDetails(m.repo); renderModels();
+  const row=$('#models').querySelector(`tr.m[data-name="${cssq(n)}"]`);
+  if(row){row.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth',block:'start'});const b=row.querySelector('[data-toggle]');if(b)b.focus({preventScroll:true})}
+});
+
 const CARET='<svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5l4.5 4.5L6 12.5"/></svg>';
 function renderModels(){
   const box=$('#models');
@@ -683,6 +756,7 @@ function renderModels(){
     if(open) row+=`<tr class="detail"><td colspan="3">${localPanel(m)}${macPanel(m,d&&typeof d==='object'&&!d.error?d:null)}${!m.repo?'<span class="mut">Not downloaded by this tool, so the source repo is unknown.</span>':d==='loading'||!d?'<span class="mut" role="status">Loading details…</span>':d.error?`<span class="err">${esc(d.error)}</span>`:modelCard(d,{variant:m.variant})}</td></tr>`;
     return row}).join(''):'<tr><td colspan="3" class="mut" style="padding:28px 8px;text-align:center">Folder is empty.</td></tr>';
   box.querySelectorAll('details[data-ck]').forEach(x=>{if(keep.has(x.dataset.ck))x.open=true});
+  renderGallery();
 }
 $('#checkupd').addEventListener('click',async()=>{try{await post('/api/updates/check');$('#updinfo').textContent='Checking…'}catch(err){say(err.message)}});
 $('#models').addEventListener('change',e=>{
