@@ -183,6 +183,13 @@ echo "exit $rc" > "$J/status"
 """
 
 
+def _atomic_write(path, text):
+    """Write via a uniquely named temp file, so two writers never rename each other's file away."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 class Manager:
     """Persisted queue of transfers (one runs at a time) plus the Mac connection settings."""
 
@@ -217,9 +224,7 @@ class Manager:
 
     def save_config(self, data):
         c = validate({**self.config(), **(data or {})})
-        tmp = self.cfg_file.with_suffix(".tmp")
-        tmp.write_text(json.dumps(c, indent=1))
-        tmp.replace(self.cfg_file)
+        _atomic_write(self.cfg_file, json.dumps(c, indent=1))
         return c
 
     def configured(self, c=None):
@@ -304,9 +309,7 @@ class Manager:
     # ----- queue -----
     def save(self):
         with self.lock:
-            tmp = self.file.with_suffix(".tmp")
-            tmp.write_text(json.dumps(self.jobs, indent=1))
-            tmp.replace(self.file)
+            _atomic_write(self.file, json.dumps(self.jobs, indent=1))
 
     def load(self):
         try:
