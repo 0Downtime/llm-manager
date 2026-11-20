@@ -4,8 +4,8 @@
 
 Point it at a folder on your NAS, paste a Hugging Face repo, and watch a 100 GB model arrive. Each
 file is checked against the hash Hugging Face publishes, and downloads resume after interruptions.
-Then copy the model to [oMLX](https://github.com/jundot/omlx) or [LM Studio](https://lmstudio.ai)
-on your Mac with one pasted command.
+Then send the model to [oMLX](https://github.com/jundot/omlx) or [LM Studio](https://lmstudio.ai)
+on your Mac with one click, and watch it arrive and get verified.
 
 ![Downloads: live progress for a running download](docs/downloads.png)
 
@@ -20,9 +20,10 @@ on your Mac with one pasted command.
   and pattern, tinted by model family), its quant, size and the release commit it came from.
 - **Library.** Lists every model in the folder with update checks. Updates re-download only the
   files that changed. Deleting a model requires typing its name.
-- **Copy to Mac.** Ready-to-paste commands that copy a model from the share into oMLX, LM Studio or
-  any folder, using the `rsync` that ships with macOS. Re-running the copy picks up where it
-  stopped.
+- **Send to Mac.** One click copies a model from the share into oMLX, LM Studio or any folder on
+  your Mac over SSH with `rsync`, with live progress, speed and ETA. Interrupted copies resume,
+  and every file's size is checked against the share when it's done. Ready-to-paste commands are
+  still there if you'd rather run the copy yourself.
 - **Speed control.** A global speed cap, plus quiet hours that lower the cap or pause downloads
   during a daily window.
 - **Gated models.** A Hugging Face token can be saved; it's checked with Hugging Face before saving
@@ -32,7 +33,7 @@ on your Mac with one pasted command.
 - **Small.** Python standard library plus `huggingface_hub`. The UI is two self-contained HTML
   files with no build step.
 
-| Library: update status and copy-to-Mac | Browse: model card with benchmarks |
+| Library: update status and Send to Mac | Browse: model card with benchmarks |
 |---|---|
 | ![Library](docs/library.png) | ![Browse](docs/browse.png) |
 
@@ -59,8 +60,9 @@ on your Mac with one pasted command.
   The models folder can be anywhere the service can write; it's usually a NAS share mounted on
   the server or bind-mounted into a container.
 - **Python package:** `huggingface_hub` (see `requirements.txt`).
-- **Optional:** Proxmox VE, if you use `deploy.sh`. A Mac with SMB access to the same share, for
-  Copy to Mac.
+- **Optional:** Proxmox VE, if you use `deploy.sh`. For Send to Mac: `openssh-client` and `rsync`
+  on the server, and Remote Login (SSH) turned on on the Mac. For the copy-it-yourself commands, a
+  Mac with SMB access to the same share.
 
 ---
 
@@ -89,7 +91,8 @@ Then open http://localhost:8080 and paste a small model, e.g. `mlx-community/Qwe
 2. **Install the app** into `/opt/llm-manager`:
    ```bash
    sudo install -d /opt/llm-manager/web /etc/llm-manager
-   sudo cp server.py downloader.py hfinfo.py auth.py /opt/llm-manager/
+   sudo apt install openssh-client rsync   # for Send to Mac
+   sudo cp server.py downloader.py hfinfo.py quants.py auth.py transfer.py /opt/llm-manager/
    sudo cp web/index.html web/login.html /opt/llm-manager/web/
    sudo python3 -m venv /opt/llm-manager/venv
    sudo /opt/llm-manager/venv/bin/pip install -r requirements.txt
@@ -165,7 +168,13 @@ password hash and the Hugging Face token are stored under `STATE_DIR` with mode 
 | `MIN_FREE_GB` | `10` | Refuse downloads that would leave less free space |
 | `UPDATE_CHECK_HOURS` | `6` | Background update-check interval |
 | `ALLOWED_NETS` | private ranges + `100.64.0.0/10` | Client CIDRs allowed to connect |
-| `MAC_SMB_URL` | *(empty)* | e.g. `smb://nas.local/files`, used in the Copy-to-Mac commands |
+| `MAC_SSH_HOST`, `MAC_SSH_USER`, `MAC_SSH_PORT` | *(empty)*, *(empty)*, `22` | The Mac to send models to. Defaults for **Settings → Send to Mac**, which overrides them |
+| `MAC_TRANSFER_MODE` | `push` | `push`: this server streams to the Mac. `pull`: the Mac reads the share itself (see [Send to Mac](#send-to-mac)) |
+| `MAC_NAS_PATH` | *(empty)* | Pull mode: where `LLM_DIR` is mounted on the Mac, e.g. `/Volumes/llms` |
+| `MAC_RSYNC` | `rsync` | rsync on the Mac, e.g. `/opt/homebrew/bin/rsync` |
+| `MAC_OMLX_DIR`, `MAC_LMSTUDIO_DIR` | `~/.omlx/models`, `~/.lmstudio/models` | Model folders on the Mac |
+| `MAC_SSH_KEY` | `STATE_DIR/ssh/id_ed25519` | Private key used to reach the Mac. Generated on first use when unset |
+| `MAC_SMB_URL` | *(empty)* | e.g. `smb://nas.local/files`, used in the copy-it-yourself commands |
 | `MAC_MOUNT` | `/Volumes/files` | Where that share appears on the Mac |
 | `LLM_SUBDIR` | name of `LLM_DIR` | Path of `LLM_DIR` inside the share |
 | `CTID` | | Container id, shown on the "set a password first" page |
@@ -173,8 +182,8 @@ password hash and the Hugging Face token are stored under `STATE_DIR` with mode 
 | `HF_HOME` | `STATE_DIR/hf-home` | `huggingface_hub`'s cache/config folder, kept out of `/home` because the unit uses `ProtectHome=yes` |
 | `LLM_AUTH` | `on` | `off` disables the login. **For local testing only**; the allowlist still applies |
 
-Settings changed in the UI (speed cap, quiet hours, token) are stored in `STATE_DIR` and take
-effect immediately.
+Settings changed in the UI (speed cap, quiet hours, token, Mac connection) are stored in
+`STATE_DIR` and take effect immediately.
 
 ---
 
@@ -229,8 +238,39 @@ Expand a model to see:
 - **Delete…** permanently removes the model folder. You must type the folder name, and it's
   refused while that model is downloading.
 
-### Copy to Mac
-Pick a target:
+### Send to Mac
+Expand a model in the Library, pick a target and press **Send to Mac**. The copy shows up at the
+top of **Downloads** with bytes on the Mac, speed, ETA and the number of files. When rsync is done,
+every file's size on the Mac is compared with the share; the card says **verified**, or lists the
+files that differ and offers **Resume**. One copy runs at a time; more wait in the queue.
+
+**Set it up once** in **Settings → Send to Mac**:
+1. Enter the Mac's host or IP and your Mac login name.
+2. Turn on Remote Login on the Mac (System Settings → General → Sharing).
+3. Copy the command under **This server's SSH key** and run it in Terminal on the Mac. It adds the
+   server's own key (generated on first use, kept in `STATE_DIR/ssh`, never shown) to
+   `~/.ssh/authorized_keys`.
+4. Press **Test connection**. It signs in, finds rsync and, in pull mode, checks the share is
+   mounted. The Mac's host key is remembered on first connect (`STATE_DIR/ssh/known_hosts`).
+
+**How the bytes travel** (also in Settings):
+- **This server streams to the Mac** (`push`, the default). The server runs `rsync -a --partial`
+  over SSH. Nothing to mount on the Mac. If the network drops, rsync retries (3 attempts, then the
+  card offers **Resume**); a service restart re-queues the copy and it carries on from the partial
+  files.
+- **The Mac reads the share itself** (`pull`). The server starts a small script on the Mac with
+  `nohup`, which runs rsync from the share mounted on the Mac (set **Models share on the Mac**, e.g.
+  a read-only NFS mount of the models folder) and retries up to 5 times. The copy keeps going if
+  the server restarts or loses the connection: the server re-attaches and keeps tracking it. Its
+  script and log live in `~/.llm-manager/transfers/<id>/` on the Mac. Mounting the share on the
+  Mac is up to you; until it's mounted, the copy fails with a message saying so.
+
+**Cancel** stops rsync (on the Mac, in pull mode) and keeps what was copied; **Resume** continues.
+**View log** shows each rsync attempt, the Mac-side log in pull mode, and the verification result.
+
+### Copy it yourself
+Under **Or copy it yourself in Terminal** (or directly, when Send to Mac isn't set up), pick a
+target:
 
 | Target | Folder |
 |---|---|
@@ -275,6 +315,7 @@ The running service picks up changes within a few seconds.
 | `downloader.py` | Resumable, hash-verified downloader with a shared speed limiter |
 | `hfinfo.py` | Hugging Face metadata for search, model cards and benchmarks (cached) |
 | `auth.py` | IP allowlist, password hash, sessions, login throttling |
+| `transfer.py` | Send to Mac: rsync over SSH (push, or detached on the Mac in pull mode), progress, verification |
 | `web/index.html`, `web/login.html` | The UI: vanilla JS, no external requests |
 | `llm-manager` | CLI wrapper |
 | `llm-manager.service` | systemd unit (sandboxed: `ProtectSystem`, `ProtectHome`, `NoNewPrivileges`) |
@@ -298,6 +339,8 @@ only to list repo files.
 | `STATE_DIR/settings.json` | Speed cap and quiet hours |
 | `STATE_DIR/auth.json`, `sessions.json`, `hf_token` | Password hash, session hashes, token (all 0600) |
 | `STATE_DIR/actions.log` | Deletions |
+| `STATE_DIR/transfers.json`, `mac.json`, `logs/mac-<id>.log` | Send to Mac queue, connection settings, per-copy logs |
+| `STATE_DIR/ssh/` | The server's SSH key for the Mac and the Mac's remembered host key |
 
 ---
 
@@ -307,7 +350,7 @@ Every endpoint needs a session cookie (from `POST /api/login`), except `/login`,
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/state` | Jobs with live progress, models with update status, disk, throttle, Mac config |
+| `GET /api/state` | Jobs with live progress, transfers to the Mac, models with update status, disk, throttle, Mac config |
 | `GET /api/preview?q=&lib=` | Search results, or a model card with stats and benchmarks |
 | `POST /api/jobs` `{repo, variant?, force?, update?, name?}` | Queue a download (`variant`: one quant of a GGUF repo) or an update (`name`: the Library folder) |
 | `POST /api/jobs/<id>/cancel` \| `retry` `{force?}` \| `remove` | Job actions |
@@ -317,6 +360,10 @@ Every endpoint needs a session cookie (from `POST /api/login`), except `/login`,
 | `GET /api/settings` | Speed settings, current throttle, token status (never the token) |
 | `POST /api/settings/speed` | `{limit_mbps, quiet:{enabled,start,end,mode,limit_mbps}}` |
 | `POST /api/settings/token` `{token}` / `POST /api/settings/token/clear` | Set or remove the token |
+| `POST /api/settings/mac` `{host, user, port, mode, mac_source, rsync, omlx_dir, lmstudio_dir}` | Save the Mac connection (`GET /api/settings` returns it with the public key) |
+| `POST /api/mac/test` | Sign in to the Mac and check rsync and, in pull mode, the share |
+| `POST /api/transfers` `{name, target, custom?}` | Send a Library folder to the Mac (`target`: `omlx`, `lmstudio` or `custom` with `custom` the parent folder) |
+| `POST /api/transfers/<id>/cancel` \| `retry` \| `remove`, `GET /api/transfers/<id>/log` | Transfer actions and log |
 | `POST /api/login` `{password}` / `POST /api/logout` | Sessions |
 
 ---
@@ -332,6 +379,10 @@ Every endpoint needs a session cookie (from `POST /api/login`), except `/login`,
 - **Headers.** Every response sends a strict CSP, `X-Frame-Options: DENY`, `nosniff` and
   `no-referrer`. All Hugging Face content is HTML-escaped.
 - **Token.** Never returned by the API, never logged, and stored with mode 0600.
+- **Send to Mac.** The server signs in to the Mac with its own key, in batch mode (no passwords),
+  and pins the Mac's host key on first connect. Mac paths and settings are checked against a
+  strict character set and shell-quoted. The key gives this server a login on your Mac: to revoke
+  it, remove its line (`… llm-manager`) from `~/.ssh/authorized_keys` on the Mac.
 - **Delete.** Only works on a direct child folder of `LLM_DIR`. Dot-names, path traversal and
   symlinks are rejected, as is any folder with an active download.
 
@@ -350,6 +401,9 @@ in a public issue.
 | "repo is gated" / 401 | Accept the model's terms on Hugging Face and set a token |
 | Speed is 0 | Quiet hours may be pausing downloads; check the job card or Settings |
 | Update check failed: permission denied under `/home` | Set `HF_HOME` to a writable folder (the default is inside `STATE_DIR`) |
+| Send to Mac: "Permission denied" | The server's key isn't in `~/.ssh/authorized_keys` on the Mac yet (Settings → Send to Mac) |
+| Send to Mac: "Host key verification failed" | The Mac was reinstalled or the IP now points elsewhere: remove its line from `STATE_DIR/ssh/known_hosts` |
+| Send to Mac: "ssh/rsync isn't installed on this server" | `apt install openssh-client rsync` on the server (in the container) |
 | Service logs | `journalctl -u llm-manager -f` |
 | Per-download log | **View log** on the job card, or `STATE_DIR/logs/<job>.log` |
 
@@ -369,7 +423,8 @@ Issues and pull requests are welcome. Keep the project's shape:
 
 Before sending a change:
 ```bash
-python3 -m py_compile server.py downloader.py hfinfo.py auth.py
+python3 -m py_compile server.py downloader.py hfinfo.py quants.py auth.py transfer.py
+python3 -m unittest discover -s tests -t .
 for f in web/index.html web/login.html; do python3 -c "import re,sys;print(re.findall(r'<script>(.*?)</script>',open(sys.argv[1]).read(),re.S)[0])" "$f" > /tmp/check.js && node --check /tmp/check.js; done
 ```
 

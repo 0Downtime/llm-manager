@@ -46,7 +46,7 @@ jobs:
           LLM_AUTH=off ALLOWED_NETS=127.0.0.0/8 LLM_DIR=/tmp/lm/models STATE_DIR=/tmp/lm/state PORT=8099 \
             python server.py serve > /tmp/lm/server.log 2>&1 &
           for i in $(seq 1 20); do curl -fs -o /dev/null http://127.0.0.1:8099/api/state && break; sleep 1; done
-          curl -fsS http://127.0.0.1:8099/api/state | python -c 'import json,sys; s=json.load(sys.stdin); assert "models" in s and "jobs" in s'
+          curl -fsS http://127.0.0.1:8099/api/state | python -c 'import json,sys; s=json.load(sys.stdin); assert "models" in s and "jobs" in s and "transfers" in s'
           curl -fsS http://127.0.0.1:8099/ | grep -q 'id="gallery"'
       - name: Server log
         if: failure()

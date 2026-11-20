@@ -20,6 +20,7 @@ import auth
 import downloader
 import hfinfo
 import quants
+import transfer
 
 from huggingface_hub import HfApi
 from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
@@ -303,6 +304,20 @@ def list_models():
     return out
 
 
+def _busy(name):
+    with lock:
+        return any(Path(j["dir"]).name == name and j["status"] in ACTIVE for j in jobs)
+
+
+MAC = transfer.Manager(STATE_DIR, LLM_DIR, busy=_busy)   # Send to Mac: transfers over SSH
+
+
+def send_to_mac(data):
+    name = data.get("name") or ""
+    meta = read_meta(LLM_DIR / name) if name and "/" not in name and not name.startswith(".") else {}
+    return MAC.add(name, data.get("target") or "omlx", data.get("custom"), meta)
+
+
 def snapshot():
     with lock:
         js = []
@@ -323,7 +338,14 @@ def snapshot():
             "updates_checking": update_state["running"], "updates_checked": update_state["checked"],
             "throttle": effective_throttle(), "token_set": bool(os.environ.get("HF_TOKEN")),
             "mac": {"smb_url": MAC_SMB_URL, "mount": MAC_MOUNT, "subdir": LLM_SUBDIR},
+            "transfers": MAC.snapshot(), "mac_ssh": _mac_brief(),
             "auth": AUTH.enabled, "now": time.time()}
+
+
+def _mac_brief():
+    c = MAC.config()
+    return {"configured": MAC.configured(c), "host": c["host"], "user": c["user"], "mode": c["mode"],
+            "omlx_dir": c["omlx_dir"], "lmstudio_dir": c["lmstudio_dir"]}
 
 
 # ---------- update check ----------
@@ -564,7 +586,7 @@ def token_status():
 
 def settings_view():
     return {"speed": load_settings(), "throttle": effective_throttle(), "token": token_status(),
-            "auth": {"enabled": AUTH.enabled}}
+            "auth": {"enabled": AUTH.enabled}, "mac": MAC.view()}
 
 
 # ---------- delete ----------
@@ -580,6 +602,8 @@ def delete_model(name, confirm):
     with lock:
         if any(Path(j["dir"]).resolve() == d.resolve() and j["status"] in ACTIVE for j in jobs):
             raise ValueError(f"{name} has an active download: cancel it first")
+    if MAC.active_for(name):
+        raise ValueError(f"{name} is being sent to the Mac: cancel that first")
     freed = sum(f.stat().st_size for f in d.rglob("*") if f.is_file() and not f.is_symlink())
     shutil.rmtree(d)
     with lock:
@@ -799,6 +823,13 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, {"kind": "error", "error": str(e)})
             except Exception as e:  # network trouble etc.
                 return self.send(200, {"kind": "error", "error": f"{type(e).__name__}: {e}"})
+        if u.path.startswith("/api/transfers/") and u.path.endswith("/log"):
+            tid = u.path.split("/")[3]
+            if not re.fullmatch(r"[0-9a-f]{10}", tid):
+                return self.send(404, {"error": "no such transfer"})
+            f = MAC.log_path(tid)
+            txt = f.read_text(errors="replace")[-30000:] if f.exists() else ""
+            return self.send(200, txt.encode(), "text/plain; charset=utf-8")
         if u.path.startswith("/api/jobs/") and u.path.endswith("/log"):
             jid = u.path.split("/")[3]
             if not re.fullmatch(r"[0-9a-f]{10}", jid):
@@ -837,6 +868,23 @@ class H(BaseHTTPRequestHandler):
                 set_token(data.get("token")); return self.send(200, settings_view())
             if parts == ["api", "settings", "token", "clear"]:
                 clear_token(); return self.send(200, settings_view())
+            if parts == ["api", "settings", "mac"]:
+                MAC.save_config(data); return self.send(200, settings_view())
+            if parts == ["api", "mac", "test"]:
+                try:
+                    return self.send(200, MAC.test())
+                except transfer.TransferError as e:
+                    return self.send(200, {"ok": False, "problems": [str(e)]})
+            if parts == ["api", "transfers"]:
+                return self.send(200, send_to_mac(data))
+            if len(parts) == 4 and parts[:2] == ["api", "transfers"]:
+                tid, act = parts[2], parts[3]
+                if act == "cancel":
+                    return self.send(200, MAC.cancel(tid))
+                if act == "retry":
+                    return self.send(200, MAC.retry(tid))
+                if act == "remove":
+                    MAC.remove(tid); return self.send(200, {"ok": True})
             if len(parts) == 4 and parts[:2] == ["api", "jobs"]:
                 jid, act = parts[2], parts[3]
                 if act == "cancel":
@@ -898,6 +946,7 @@ def serve():
     threading.Thread(target=monitor, daemon=True).start()
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=update_loop, daemon=True).start()
+    threading.Thread(target=MAC.worker, daemon=True).start()
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), H)
     print(f"llm-manager on :{PORT}, models in {LLM_DIR}, login {'on' if AUTH.enabled else 'OFF (testing only)'}"
           f"{'' if AUTH.has_password() or not AUTH.enabled else ' (no password set yet: run llm-manager passwd)'}", flush=True)

@@ -227,6 +227,19 @@ tr.open .caret{transform:rotate(90deg)}
 .local .upd{font-size:13px;min-width:0;flex:1 1 240px}
 .local .upd.has{color:var(--warn)}
 .mac h3{margin-top:0}
+.send{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:4px 0 10px}
+.send .to{font-size:12.5px;min-width:0;flex:1 1 240px;word-break:break-all}
+.mac details.manual>summary{cursor:pointer;font-size:12.5px;color:var(--mut);margin-top:6px}
+.xhead{font-size:13px;font-weight:650;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:4px 0 10px}
+.vlist{font-size:12px;margin-top:6px;word-break:break-all}
+.pubkey{display:flex;gap:6px;align-items:flex-start;margin-top:4px}
+.pubkey pre{flex:1;min-width:0;margin:0;padding:8px 10px;border-radius:8px;background:var(--well);border:1px solid var(--line);white-space:pre-wrap;word-break:break-all;font-size:11.5px}
+.sgrid .wide{grid-column:1/-1}
+.fgrid{display:grid;gap:0 14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr))}
+.fgrid input,.fgrid select{width:100%}
+.testres{font-size:13px;margin-top:10px}
+.linkish{background:none;border:0;padding:0;font:inherit;color:var(--acc-text);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.linkish:has(.pill){text-decoration:none}
 .steps{margin:10px 0;padding-left:20px;display:grid;gap:10px}
 .steps li{min-width:0}
 .cmd{display:flex;gap:6px;align-items:flex-start;margin-top:4px}
@@ -318,12 +331,13 @@ dialog .actions{justify-content:flex-end;margin-top:18px}
   <section id="p-downloads" role="tabpanel" aria-labelledby="tab-downloads">
     <div class="phead"><div><h2>Downloads</h2><div class="sub" id="dlsum">&nbsp;</div></div>
       <button class="btn" type="button" data-goto="browse"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add a model</button></div>
+    <div id="xfers"></div>
     <div id="jobs"><div class="card empty">No downloads yet.</div></div>
   </section>
 
   <!-- Library -->
   <section id="p-library" role="tabpanel" aria-labelledby="tab-library" hidden>
-    <div class="phead"><div><h2>Library</h2><div class="sub">Models in the folder. Select one for stats, benchmarks and copy-to-Mac commands.</div></div>
+    <div class="phead"><div><h2>Library</h2><div class="sub">Models in the folder. Select one for stats, benchmarks and to send it to your Mac.</div></div>
       <div class="libtools"><span class="mut" style="font-size:12.5px" id="updinfo" role="status"></span><button class="btn" id="checkupd" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-2.6-5.9M20 4v5h-5"/></svg>Check for updates</button></div></div>
     <div class="gallery" id="gallery" aria-label="Model cards"></div>
     <div class="card tcard"><table class="mtable">
@@ -353,7 +367,7 @@ dialog .actions{justify-content:flex-end;margin-top:18px}
 
   <!-- Settings -->
   <section id="p-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
-    <div class="phead"><div><h2>Settings</h2><div class="sub">Hugging Face access and download speed.</div></div></div>
+    <div class="phead"><div><h2>Settings</h2><div class="sub">Hugging Face access, download speed and the Mac to send models to.</div></div></div>
     <div class="sgrid">
       <div class="card">
         <h3>Hugging Face token</h3>
@@ -379,6 +393,30 @@ dialog .actions{justify-content:flex-end;margin-top:18px}
               <span id="qcapwrap" class="row"><label class="sr" for="qcap">Quiet-hours cap in MB/s</label><input type="number" id="qcap" min="0" step="1"><span class="unit">MB/s</span></span></div></div>
           <div class="actions"><button class="pri" type="submit">Save speed settings</button></div>
         </form>
+      </div>
+      <div class="card wide" id="maccard">
+        <h3>Send to Mac</h3>
+        <div class="hint" style="margin-top:0">Copies a model from the share to your Mac over SSH with rsync, shows progress, and checks every file's size when it's done. Interrupted copies resume.</div>
+        <form id="macform" autocomplete="off">
+          <div class="fgrid">
+            <div class="fld"><label for="mhost">Mac host or IP</label><input type="text" id="mhost" placeholder="10.0.40.101" spellcheck="false" autocapitalize="off"></div>
+            <div class="fld"><label for="muser">Mac user</label><input type="text" id="muser" placeholder="your Mac login name" spellcheck="false" autocapitalize="off"></div>
+            <div class="fld"><label for="mport">SSH port</label><input type="number" id="mport" min="1" max="65535"></div>
+            <div class="fld"><label for="mmode">How the bytes travel</label>
+              <select id="mmode"><option value="push">This server streams to the Mac</option><option value="pull">The Mac reads the share itself</option></select></div>
+            <div class="fld" id="msrcwrap"><label for="msrc">Models share on the Mac</label><input type="text" id="msrc" placeholder="/Volumes/llms" spellcheck="false" autocapitalize="off"></div>
+            <div class="fld"><label for="mrsync">rsync on the Mac</label><input type="text" id="mrsync" placeholder="rsync" spellcheck="false" autocapitalize="off"></div>
+            <div class="fld"><label for="momlx">oMLX models folder</label><input type="text" id="momlx" spellcheck="false" autocapitalize="off"></div>
+            <div class="fld"><label for="mlms">LM Studio models folder</label><input type="text" id="mlms" spellcheck="false" autocapitalize="off"></div>
+          </div>
+          <div class="hint" id="mmodehint"></div>
+          <div class="actions"><button class="pri" type="submit">Save Mac settings</button><button class="btn" type="button" id="mtest">Test connection</button></div>
+        </form>
+        <div class="testres" id="mtestres" role="status" aria-live="polite"></div>
+        <div class="fld"><span class="l">This server's SSH key</span>
+          <div class="hint" style="margin-top:0">Authorize it once on the Mac (Terminal, signed in as the Mac user above). Remote Login must be on in System Settings → General → Sharing.</div>
+          <div class="pubkey"><pre class="mono" id="mpubcmd">…</pre><button class="sm" type="button" data-copytext="mpubcmd">Copy</button></div>
+          <div class="hint mono" id="mkeypath"></div></div>
       </div>
     </div>
     <div class="setmsg" id="setmsg" role="status" aria-live="polite"></div>
@@ -477,8 +515,9 @@ function renderJobs(s){
   if(fk&&fk[1]){const el=box.querySelector(`.job[data-id="${cssq(fk[0])}"] ${fk[1]}`);if(el)el.focus({preventScroll:true})}
   const act=s.jobs.filter(j=>['queued','preparing','running'].includes(j.status)), run=s.jobs.filter(j=>j.status==='running');
   const speed=run.reduce((t,j)=>t+(j.speed||0),0), tot=run.reduce((t,j)=>t+(j.total||0),0), got=run.reduce((t,j)=>t+(j.bytes||0),0);
-  $('#dlsum').textContent=act.length?`${act.length} active`+(run.length?` · ${fmt(speed)}/s`:'')+(run.length&&s.throttle&&s.throttle.reason?` · ${s.throttle.reason}`:''):s.jobs.length?'Nothing running.':'Queue is empty.';
-  const n=$('#n-downloads'); n.hidden=!act.length; n.textContent=act.length; n.setAttribute('aria-label',act.length+' active');
+  const xa=(s.transfers||[]).filter(t=>XACTIVE.includes(t.status)).length, na=act.length+xa;
+  $('#dlsum').textContent=xa&&!act.length?`${xa} sending to Mac`:act.length?`${act.length} active`+(run.length?` · ${fmt(speed)}/s`:'')+(run.length&&s.throttle&&s.throttle.reason?` · ${s.throttle.reason}`:''):s.jobs.length?'Nothing running.':'Queue is empty.';
+  const n=$('#n-downloads'); n.hidden=!na; n.textContent=na; n.setAttribute('aria-label',na+' active');
   document.title=(run.length&&tot?Math.floor(got/tot*100)+'% · ':'')+'LLM Models';
 }
 $('#jobs').addEventListener('click',async e=>{
@@ -487,6 +526,51 @@ $('#jobs').addEventListener('click',async e=>{
   try{await post(`/api/jobs/${encodeURIComponent(id)}/${act==='force'?'retry':act}`,act==='force'?{force:true}:{});refresh()}
   catch(err){say(err.message);b.disabled=false}
 });
+
+/* ---------- transfers to the Mac ---------- */
+const XACTIVE=['queued','starting','running','verifying'];
+const XLABEL={queued:'queued',starting:'connecting',running:'copying',verifying:'verifying',done:'done',failed:'failed',cancelled:'cancelled'};
+const XCLASS={starting:'preparing',running:'running',verifying:'running',done:'done',failed:'failed'};
+function xferCard(t){
+  const total=t.total||0, bytes=t.status==='done'?total:Math.min(t.bytes||0,total), pct=total?bytes/total*100:0, running=t.status==='running', cls=XCLASS[t.status]||'';
+  let h=`<article class="card job st-${cls}" data-xid="${esc(t.id)}" aria-label="${esc(t.name)} to Mac"><div class="jobhead"><span class="repo">${esc(t.name)} <span class="pill info lc">to Mac</span></span><span class="pill ${cls}">${esc(XLABEL[t.status]||t.status)}</span></div>`;
+  h+=`<div class="mut mono dir">${esc(t.user)}@${esc(t.host)}:${esc(t.dest_abs||t.dest)}</div><div class="mut" style="font-size:12px">${t.mode==='pull'?'The Mac reads the share and copies (keeps going if this server restarts)':'Streamed from this server over SSH'}${t.attempts>1?` · attempt ${esc(t.attempts)}`:''}</div>`;
+  if(total){
+    h+=`<div class="tele"><div class="pct">${pct.toFixed(1)}<span>%</span></div><dl class="tgrid">`+tele('On the Mac',`${fmt(bytes)} <span class="mut">/ ${fmt(total)}</span>`);
+    if(running) h+=tele('Speed',`${fmt(t.speed||0)}/s`)+tele('ETA',t.speed>0?dur((total-bytes)/t.speed):'–');
+    h+=tele('Files',`${esc(t.files||0)}`)+`</dl></div><div class="bar big ${t.status==='done'?'ok':''}" role="progressbar" aria-label="Copy progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct.toFixed(1)}"><i style="width:${pct}%"></i></div>`;
+  }
+  if(t.status==='verifying') h+=`<div class="note">Comparing every file's size on the Mac with the share…</div>`;
+  const v=t.verify;
+  if(v&&v.ok) h+=`<div class="note"><span class="pill good">verified</span> All ${esc(v.files)} files (${fmt(v.bytes)}) match the share${t.finished?` · finished ${esc(ago(t.finished*1000))}`:''}.</div>`;
+  else if(v&&v.problems&&v.problems.length) h+=`<div class="vlist mono">${v.problems.map(p=>`${esc(p.path)}: ${p.actual==null?'missing':fmt(p.actual)} on the Mac, ${fmt(p.expected)} on the share`).join('<br>')}${v.bad>v.problems.length?'<br>…':''}</div>`;
+  if(t.error) h+=`<div class="err" role="alert">${esc(t.error)}</div>`;
+  h+=`<div class="actions">`;
+  if(XACTIVE.includes(t.status)) h+=`<button class="sm" data-xact="cancel">Cancel</button>`;
+  if(['failed','cancelled'].includes(t.status)) h+=`<button class="sm pri" data-xact="retry">Resume</button>`;
+  if(t.status==='done') h+=`<button class="sm" data-xact="retry">Copy again</button>`;
+  if(!XACTIVE.includes(t.status)) h+=`<button class="sm" data-xact="remove">Clear</button>`;
+  h+=`<a class="loglink" href="/api/transfers/${esc(t.id)}/log" target="_blank" rel="noopener">View log</a></div></article>`;
+  return h;
+}
+function renderTransfers(s){
+  const box=$('#xfers'), ts=s.transfers||[], a=document.activeElement;
+  let fk=null; if(a&&box.contains(a)&&a.dataset.xact){fk=[a.closest('.job').dataset.xid,a.dataset.xact]}
+  box.innerHTML=ts.length?`<div class="xhead">Sending to Mac</div>`+ts.map(xferCard).join('')+(s.jobs.length?`<div class="xhead">Downloads</div>`:''):'';
+  if(fk){const el=box.querySelector(`.job[data-xid="${cssq(fk[0])}"] [data-xact="${cssq(fk[1])}"]`);if(el)el.focus({preventScroll:true})}
+}
+$('#xfers').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-xact]'); if(!b)return;
+  const id=b.closest('.job').dataset.xid; b.disabled=true;
+  try{await post(`/api/transfers/${encodeURIComponent(id)}/${b.dataset.xact}`);refresh()}
+  catch(err){say(err.message);b.disabled=false}
+});
+async function sendToMac(name,btn){
+  btn.disabled=true;
+  const t=ls.get('macTarget')||'omlx';
+  try{await post('/api/transfers',{name,target:t,custom:t==='custom'?(ls.get('macCustom')||'~/models'):null});say(`Sending ${name} to the Mac: follow it in Downloads.`);modelsSig='';refresh()}
+  catch(err){say(err.message);btn.disabled=false}
+}
 
 /* ---------- model card (shared by browser + folder list) ---------- */
 function fitLevel(size){
@@ -679,13 +763,20 @@ function macPanel(m,d){
   if(m.busy||m.partial) warn.push('This download isn\'t finished yet: copy it once it completes.');
   if(t==='lmstudio'&&tags.some(x=>/^oq/.test(x))) warn.push('This is an oQ checkpoint for oMLX; LM Studio can\'t load it. Use the oMLX target.');
   if(d&&d.library&&!['mlx','gguf'].includes(d.library)&&t!=='custom') warn.push(`This is a ${d.library} model, not MLX/GGUF; ${MAC_TARGETS[t].label} may not run it.`);
-  let s=`<div class="mac" data-mac="${esc(m.name)}"><h3>Copy to Mac</h3><div class="opts" style="margin-top:0">
+  let s=`<div class="mac" data-mac="${esc(m.name)}"><h3>Send to Mac</h3><div class="opts" style="margin-top:0">
     <label class="chk">Target <select data-mactarget>${Object.entries(MAC_TARGETS).map(([k,v])=>`<option value="${k}" ${k===t?'selected':''}>${v.label}</option>`).join('')}</select></label>
     <label class="chk" ${t==='custom'?'':'hidden'}>Parent folder <input type="text" data-maccustom value="${esc(ls.get('macCustom')||'~/models')}" spellcheck="false" autocapitalize="off" style="width:220px;max-width:100%"></label>
     ${macFit(m.size)}</div>`;
   if(warn.length) s+=warn.map(w=>`<div class="warnline">${esc(w)}</div>`).join('');
-  s+=`<ol class="steps">${macCommands(m).map(([label,cmd])=>`<li><div class="mut" style="font-size:12.5px">${esc(label)}</div><div class="cmd"><pre class="mono">${esc(cmd)}</pre><button class="sm" data-copy>Copy</button></div></li>`).join('')}</ol>
-    <div class="hint">Run in Terminal on the Mac. ${t==='custom'?'':`${MAC_TARGETS[t].label} picks the model up from that folder.`} ${!(state&&state.mac&&state.mac.smb_url)?'Mount the files share in Finder first (MAC_SMB_URL isn\'t configured on the server).':''}</div></div>`;
+  const ms=(state&&state.mac_ssh)||{}, xs=((state&&state.transfers)||[]).filter(x=>x.name===m.name), cur=xs.find(x=>XACTIVE.includes(x.status))||xs[0];
+  if(ms.configured){
+    const where=macDest(m).dest.replace(/^\$HOME/,'~').replace(/^~\/\.omlx\/models/,ms.omlx_dir||'~/.omlx/models').replace(/^~\/\.lmstudio\/models/,ms.lmstudio_dir||'~/.lmstudio/models');
+    s+=`<div class="send"><button class="pri sm" data-send="${esc(m.name)}" ${m.busy||m.partial||(cur&&XACTIVE.includes(cur.status))?'disabled':''}>Send to Mac</button>
+      <span class="to mut">to <span class="mono">${esc(ms.user)}@${esc(ms.host)}:${esc(where)}</span>${cur?` · <button type="button" class="linkish" data-goto="downloads"><span class="pill ${XCLASS[cur.status]||''}">${esc(XLABEL[cur.status]||cur.status)}</span></button>`:''}</span></div>`;
+  } else s+=`<div class="hint" style="margin-top:0">To send it from here instead of running commands, set up your Mac under <button type="button" class="linkish" data-goto="settings">Settings → Send to Mac</button>.</div>`;
+  const steps=`<ol class="steps">${macCommands(m).map(([label,cmd])=>`<li><div class="mut" style="font-size:12.5px">${esc(label)}</div><div class="cmd"><pre class="mono">${esc(cmd)}</pre><button class="sm" data-copy>Copy</button></div></li>`).join('')}</ol>
+    <div class="hint">Run in Terminal on the Mac. ${t==='custom'?'':`${MAC_TARGETS[t].label} picks the model up from that folder.`} ${!(state&&state.mac&&state.mac.smb_url)?'Mount the files share in Finder first (MAC_SMB_URL isn\'t configured on the server).':''}</div>`;
+  s+=ms.configured?`<details class="manual"><summary>Or copy it yourself in Terminal</summary>${steps}</details></div>`:steps+`</div>`;
   return s;
 }
 function copyText(text){
@@ -797,6 +888,8 @@ $('#models').addEventListener('click',async e=>{
   if(cb){const ok=copyText(cb.previousElementSibling.textContent);cb.textContent=ok?'Copied':'Press ⌘C';
     if(!ok){const r=document.createRange();r.selectNodeContents(cb.previousElementSibling);const s=getSelection();s.removeAllRanges();s.addRange(r)}
     setTimeout(()=>cb.textContent='Copy',1600);return}
+  const sb=e.target.closest('[data-send]');
+  if(sb){sendToMac(sb.dataset.send,sb);return}
   const ub=e.target.closest('[data-update]');
   if(ub){ub.disabled=true;try{await post('/api/jobs',{repo:ub.dataset.update,name:ub.dataset.name,update:true,force:$('#force').checked});say('Queued update for '+ub.dataset.update);refresh()}catch(err){say(err.message);ub.disabled=false}return}
   const db=e.target.closest('[data-delete]');
@@ -829,12 +922,14 @@ async function refresh(){
     $('#disktxt').textContent=`${fmt(d.free)} free of ${fmt(d.total)}`;
     $('#disktxt').className='free'+(low?' low':'');
     $('#diskbar').className='bar'+(low?' full':''); $('#diskbar i').style.width=up+'%';
+    renderTransfers(s);
     renderJobs(s);
     $('#updinfo').textContent=s.updates_checking?'Checking…':s.updates_checked?'Last checked '+ago(s.updates_checked*1000):'';
     $('#checkupd').disabled=!!s.updates_checking;
     const nu=s.models.filter(m=>m.update&&m.update.status==='update'&&!m.busy).length, nl=$('#n-library');
     nl.hidden=!nu; nl.textContent=nu; nl.setAttribute('aria-label',nu+(nu===1?' update available':' updates available'));
-    const sig=JSON.stringify(s.models.map(m=>[m.name,m.files,m.size,m.partial,m.busy,m.sha,m.update&&[m.update.status,m.update.remote_sha]]));
+    const sig=JSON.stringify([s.models.map(m=>[m.name,m.files,m.size,m.partial,m.busy,m.sha,m.update&&[m.update.status,m.update.remote_sha]]),
+      (s.transfers||[]).map(t=>[t.name,t.status]),s.mac_ssh]);
     // only re-render the table when something changed, so expanded rows, inputs and open <details> stay put
     if(sig!==modelsSig){modelsSig=sig;models=s.models;renderModels()}
   }catch(e){say('Lost connection to server, retrying…');$('#conn').className='conn lost';$('#conn').textContent='Offline'}
@@ -848,7 +943,34 @@ function fillSettings(v){
   $('#cap').value=sp.limit_mbps; $('#qon').checked=sp.quiet.enabled; $('#qstart').value=sp.quiet.start; $('#qend').value=sp.quiet.end;
   $('#qmode').value=sp.quiet.mode; $('#qcap').value=sp.quiet.limit_mbps; $('#qcapwrap').hidden=sp.quiet.mode==='pause';
   $('#throttlenow').textContent=(v.throttle.reason||'no limit')+'.';
+  if(v.mac) fillMac(v.mac);
 }
+function fillMac(m){
+  $('#mhost').value=m.host||''; $('#muser').value=m.user||''; $('#mport').value=m.port||22; $('#mmode').value=m.mode||'push';
+  $('#msrc').value=m.mac_source||''; $('#mrsync').value=m.rsync||'rsync'; $('#momlx').value=m.omlx_dir||''; $('#mlms').value=m.lmstudio_dir||'';
+  macModeHint();
+  $('#mpubcmd').textContent=m.public_key?`mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '${m.public_key}' >> ~/.ssh/authorized_keys`:(m.key_error||'No key yet.');
+  $('#mkeypath').textContent=m.key_path?`Private key on this server: ${m.key_path}${m.key_from_env?' (from MAC_SSH_KEY)':''}`:'';
+}
+function macModeHint(){
+  const pull=$('#mmode').value==='pull'; $('#msrcwrap').hidden=!pull;
+  $('#mmodehint').textContent=pull?'The Mac runs rsync in the background, reading the models share where it\'s mounted on the Mac (for example a read-only NFS mount). The copy keeps going if this server restarts.'
+    :'This server runs rsync and streams the files to the Mac over SSH. Nothing to mount on the Mac. A restart of this server pauses the copy, and it resumes on its own.';
+}
+$('#mmode').addEventListener('change',macModeHint);
+function macForm(){return {host:$('#mhost').value.trim(),user:$('#muser').value.trim(),port:+$('#mport').value||22,mode:$('#mmode').value,
+  mac_source:$('#msrc').value.trim(),rsync:$('#mrsync').value.trim()||'rsync',omlx_dir:$('#momlx').value.trim(),lmstudio_dir:$('#mlms').value.trim()}}
+$('#macform').addEventListener('submit',async e=>{e.preventDefault();
+  try{fillSettings(await post('/api/settings/mac',macForm()));$('#setmsg').textContent='Mac settings saved.';refresh()}catch(err){$('#setmsg').textContent=err.message}});
+$('#mtest').addEventListener('click',async()=>{const b=$('#mtest'),out=$('#mtestres');b.disabled=true;out.textContent='Connecting…';
+  try{await post('/api/settings/mac',macForm());const r=await post('/api/mac/test');
+    out.innerHTML=(r.ok?'<span class="pill good">connected</span> ':'<span class="pill bad">problem</span> ')
+      +(r.home?`Signed in to ${esc(r.os||'the Mac')} as ${esc($('#muser').value)} (home ${esc(r.home)}). `:'')
+      +(r.rsync?`rsync: ${esc(r.rsync)}. `:'')+(r.problems||[]).map(p=>`<div class="err">${esc(p)}</div>`).join('')}
+  catch(err){out.innerHTML=`<span class="err">${esc(err.message)}</span>`}
+  b.disabled=false});
+$('#maccard').addEventListener('click',e=>{const b=e.target.closest('[data-copytext]');if(!b)return;
+  const ok=copyText($('#'+b.dataset.copytext).textContent);b.textContent=ok?'Copied':'Press ⌘C';setTimeout(()=>b.textContent='Copy',1600)});
 async function loadSettings(){try{fillSettings(await (await api('/api/settings')).json())}catch(e){$('#setmsg').textContent=e.message}}
 $('#qmode').addEventListener('change',()=>{$('#qcapwrap').hidden=$('#qmode').value==='pause'});
 $('#tokform').addEventListener('submit',async e=>{e.preventDefault();const tok=$('#tok').value.trim();if(!tok)return;

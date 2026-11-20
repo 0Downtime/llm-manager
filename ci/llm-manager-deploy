@@ -13,7 +13,7 @@ umask 022
 SRC=$(realpath -e "${1:?usage: llm-manager-deploy <source dir>}")
 APP=/opt/llm-manager
 PY=$APP/venv/bin/python
-FILES=(server.py downloader.py hfinfo.py quants.py auth.py web/index.html web/login.html)
+FILES=(server.py downloader.py hfinfo.py quants.py auth.py transfer.py web/index.html web/login.html)
 PORT=$(sed -n 's/^PORT=//p' /etc/llm-manager/env 2>/dev/null | tail -1); PORT=${PORT:-8080}
 
 for f in "${FILES[@]}" llm-manager requirements.txt; do
