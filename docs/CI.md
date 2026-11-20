@@ -27,6 +27,8 @@ That is the runner's only root access (`/etc/sudoers.d/llm-manager-ci`). `ci/llm
 It never touches `/etc/llm-manager/env`, the state dir (password, sessions, HF token, job list), the systemd
 unit or the models share. A restart pauses a running download; it resumes from its partial files.
 New app files must be added to `FILES` in `ci/llm-manager-deploy` and `APP_FILES` in `deploy.sh`.
+The deploy helper doesn't install system packages: Send to Mac needs `openssh-client` and `rsync` in
+the container (`deploy.sh --bootstrap` installs them on a new container).
 
 The repo is public, so the self-hosted runner only ever gets pushes to `main` and manual runs from this
 repo, never pull requests (from forks or not).

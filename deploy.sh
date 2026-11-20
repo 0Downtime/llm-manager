@@ -14,11 +14,11 @@ BOOTSTRAP=0
 [[ ${1:-} == --bootstrap ]] && BOOTSTRAP=1
 
 cd "$(dirname "$0")"
-APP_FILES=(server.py downloader.py hfinfo.py quants.py auth.py web/index.html web/login.html)
+APP_FILES=(server.py downloader.py hfinfo.py quants.py auth.py transfer.py web/index.html web/login.html)
 for f in "${APP_FILES[@]}" llm-manager llm-manager.service env.example ci/llm-manager-deploy; do
   [[ -f $f ]] || { echo "missing $f" >&2; exit 1; }
 done
-python3 -m py_compile server.py downloader.py hfinfo.py quants.py auth.py
+python3 -m py_compile server.py downloader.py hfinfo.py quants.py auth.py transfer.py
 
 echo "==> deploying to CT $CTID on $PXE_HOST"
 # 1) upload the files to a temp dir on the Proxmox node, 2) run the install script there
@@ -33,7 +33,7 @@ run() { pct exec "$CTID" -- "$@"; }
 
 if [[ $BOOTSTRAP == 1 ]]; then
   echo "==> bootstrap: python venv + huggingface_hub"
-  run bash -c 'export DEBIAN_FRONTEND=noninteractive LC_ALL=C; apt-get update -qq && apt-get install -y -qq python3 python3-venv ca-certificates curl >/dev/null'
+  run bash -c 'export DEBIAN_FRONTEND=noninteractive LC_ALL=C; apt-get update -qq && apt-get install -y -qq python3 python3-venv ca-certificates curl openssh-client rsync >/dev/null'
   run bash -c 'mkdir -p /opt/llm-manager && [ -x /opt/llm-manager/venv/bin/python ] || python3 -m venv /opt/llm-manager/venv'
   run bash -c 'LC_ALL=C /opt/llm-manager/venv/bin/pip install -q --upgrade pip huggingface_hub'
 fi
